@@ -1,0 +1,79 @@
+name: Check Bento Release
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Get current Bento version
+        id: current
+        run: |
+          CURRENT=$(grep 'github.com/warpstreamlabs/bento/v4' go.mod | awk '{print $2}')
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current Bento version: $CURRENT"
+
+      - name: Get latest Bento release
+        id: latest
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/warpstreamlabs/bento/releases/latest | jq -r .tag_name)
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest Bento release: $LATEST"
+
+      - name: Check if update needed
+        id: check
+        run: |
+          if [ "${{ steps.current.outputs.version }}" != "${{ steps.latest.outputs.version }}" ]; then
+            echo "update=true" >> $GITHUB_OUTPUT
+            echo "Update available: ${{ steps.current.outputs.version }} -> ${{ steps.latest.outputs.version }}"
+          else
+            echo "update=false" >> $GITHUB_OUTPUT
+            echo "Already up to date"
+          fi
+
+      - name: Update Bento dependency
+        if: steps.check.outputs.update == 'true'
+        run: |
+          go get github.com/warpstreamlabs/bento/v4@${{ steps.latest.outputs.version }}
+          go mod tidy
+
+      - name: Verify build
+        if: steps.check.outputs.update == 'true'
+        run: go build ./...
+
+      - name: Verify tests
+        if: steps.check.outputs.update == 'true'
+        run: go test ./... -race -timeout 5m
+
+      - name: Create Pull Request
+        if: steps.check.outputs.update == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update Bento to ${{ steps.latest.outputs.version }}"
+          title: "chore: update Bento to ${{ steps.latest.outputs.version }}"
+          body: |
+            Automated update of Bento dependency.
+
+            **Current version:** ${{ steps.current.outputs.version }}
+            **New version:** ${{ steps.latest.outputs.version }}
+
+            Changes: https://github.com/warpstreamlabs/bento/releases/tag/${{ steps.latest.outputs.version }}
+
+            Build and tests verified automatically.
+          branch: chore/update-bento-${{ steps.latest.outputs.version }}
+          labels: dependencies,automated

@@ -1,0 +1,26 @@
+# Example: SQS Messages to Workflow EventBus
+#
+# This configuration uses bento.input to consume messages from an AWS SQS
+# queue and publish them onto the workflow engine's internal EventBus. The
+# messaging.broker module connects the EventBus to downstream workflow
+# handlers, allowing SQS messages to trigger arbitrary workflow logic.
+
+modules:
+  - name: sqs-source
+    type: bento.input
+    config:
+      input:
+        aws_sqs:
+          url: https://sqs.us-east-1.amazonaws.com/123456789/my-queue
+          region: us-east-1
+      target_topic: "sqs-events"
+
+  - name: event-broker
+    type: messaging.broker
+
+triggers:
+  event:
+    subscriptions:
+      - topic: sqs-events
+        workflow: order-workflow
+        action: process_order

@@ -1,0 +1,69 @@
+# Example: Full Stream Pipeline with Enrichment
+#
+# A complete end-to-end pipeline demonstrating:
+#   - bento.input consuming from Kafka into the workflow EventBus
+#   - A workflow step using step.bento for in-flight Bloblang enrichment
+#   - bento.output sinking processed events to S3 for archival
+#   - A secondary bento trigger consuming priority orders from SQS
+#
+# Message flow:
+#   Kafka (raw-orders) -> bento.input -> EventBus (ingested-orders)
+#     -> enrich-order workflow -> step.bento (Bloblang) -> EventBus (processed-orders)
+#     -> bento.output -> S3 (order-archive)
+#   SQS (priority-orders) -> bento trigger -> order-workflow -> process_priority
+
+modules:
+  - name: event-broker
+    type: messaging.broker
+
+  - name: order-ingest
+    type: bento.input
+    config:
+      input:
+        kafka:
+          addresses: ["localhost:9092"]
+          topics: ["raw-orders"]
+          consumer_group: workflow-ingest
+      target_topic: "ingested-orders"
+
+  - name: order-archive
+    type: bento.output
+    config:
+      output:
+        aws_s3:
+          bucket: order-archive
+          path: "orders/${!timestamp_unix()}/${!uuid_v4()}.json"
+      source_topic: "processed-orders"
+
+workflows:
+  http:
+    pipelines:
+      - name: enrich-order
+        trigger: event
+        trigger_config:
+          topic: ingested-orders
+        steps:
+          - name: transform
+            type: step.bento
+            config:
+              processors:
+                - mapping: |
+                    root = this
+                    root.total = this.items.map_each(item -> item.price * item.quantity).sum()
+                    root.enriched_at = now()
+          - name: publish-result
+            type: publish
+            config:
+              topic: processed-orders
+              payload:
+                order_id: "${order_id}"
+                total: "${total}"
+
+triggers:
+  bento:
+    subscriptions:
+      - input:
+          aws_sqs:
+            url: https://sqs.us-east-1.amazonaws.com/123456789/priority-orders
+        workflow: order-workflow
+        action: process_priority

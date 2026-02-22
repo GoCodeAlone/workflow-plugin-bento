@@ -1,0 +1,25 @@
+# Example: Kafka to S3 ETL Pipeline
+#
+# This pipeline reads order events from a Kafka topic, enriches them with a
+# processed_at timestamp via a Bloblang mapping, and archives the results to
+# an S3 bucket. The bento.stream module manages the full end-to-end flow
+# as a standalone Bento stream — no workflow steps required.
+
+modules:
+  - name: kafka-to-s3-stream
+    type: bento.stream
+    config:
+      input:
+        kafka:
+          addresses: ["localhost:9092"]
+          topics: ["orders"]
+          consumer_group: workflow-bento
+      pipeline:
+        processors:
+          - mapping: |
+              root = this
+              root.processed_at = now()
+      output:
+        aws_s3:
+          bucket: order-archive
+          path: "orders/${!timestamp_unix()}.json"

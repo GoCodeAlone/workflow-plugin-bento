@@ -1,0 +1,15 @@
+# Example: Workflow Events to GCP Pub/Sub
+#
+# This configuration uses bento.output to sink events from the workflow
+# engine's internal EventBus to a GCP Pub/Sub topic. Useful for fanning
+# out processed workflow results to downstream consumers in Google Cloud.
+
+modules:
+  - name: pubsub-sink
+    type: bento.output
+    config:
+      output:
+        gcp_pubsub:
+          project: my-project
+          topic: processed-events
+      source_topic: "processed-events"
