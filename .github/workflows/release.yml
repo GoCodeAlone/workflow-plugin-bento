@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+env:
+  GONOSUMCHECK: github.com/GoCodeAlone/*
+  GONOSUMDB: github.com/GoCodeAlone/*
+  GOPRIVATE: github.com/GoCodeAlone/*
+
 jobs:
   release:
     name: Build and Release

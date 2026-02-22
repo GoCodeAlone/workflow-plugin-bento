@@ -9,6 +9,11 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  GONOSUMCHECK: github.com/GoCodeAlone/*
+  GONOSUMDB: github.com/GoCodeAlone/*
+  GOPRIVATE: github.com/GoCodeAlone/*
+
 jobs:
   check-update:
     runs-on: ubuntu-latest
