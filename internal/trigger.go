@@ -149,7 +149,9 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 			defer wg.Done()
 			if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
 				slog.Error("bento trigger stream runtime error", "workflow", workflow, "action", action, "error", err)
-				_ = cb("stream_error", map[string]any{"error": err.Error(), "workflow": workflow, "action": action})
+				if cbErr := cb("stream_error", map[string]any{"error": err.Error(), "workflow": workflow, "action": action}); cbErr != nil {
+					slog.Error("bento trigger stream_error callback error", "workflow", workflow, "action", action, "callback_error", cbErr)
+				}
 			}
 		}()
 	}
