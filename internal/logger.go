@@ -2,7 +2,6 @@ package internal
 
 import (
 	"log/slog"
-	"os"
 )
 
 // bentoLogger is a structured logger wrapper for all bento plugin modules.
@@ -13,13 +12,11 @@ type bentoLogger struct {
 }
 
 // newLogger creates a bentoLogger for the given component type and name.
-// It uses the default slog handler unless one has been configured globally.
+// It uses slog.Default() so that any global slog configuration (handler,
+// output, format) set by the caller via slog.SetDefault() is respected.
 func newLogger(component, name string) *bentoLogger {
-	base := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
 	return &bentoLogger{
-		logger: base.With(
+		logger: slog.Default().With(
 			slog.String("component", component),
 			slog.String("name", name),
 		),
@@ -33,7 +30,7 @@ func (l *bentoLogger) LogStreamStart(transport string, extraFields ...any) {
 }
 
 // LogStreamStop emits an info-level log line when a stream stops.
-// uptimeSeconds is the duration the stream was running.
+// messagesProcessed is the total number of messages processed before the stream stopped.
 func (l *bentoLogger) LogStreamStop(messagesProcessed int64, extraFields ...any) {
 	args := append([]any{slog.Int64("messages_processed", messagesProcessed)}, extraFields...)
 	l.logger.Info("stream stopped", args...)
