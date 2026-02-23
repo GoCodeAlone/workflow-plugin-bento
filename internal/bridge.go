@@ -47,4 +47,3 @@ func messageToMap(msg *service.Message) (map[string]any, error) {
 
 	return result, nil
 }
-
