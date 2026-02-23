@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 	"github.com/warpstreamlabs/bento/v4/public/service"
@@ -42,6 +43,8 @@ func newProcessorStep(name string, config map[string]any) (*processorStep, error
 // Execute runs the input data through the configured Bento processors and
 // returns the transformed output.
 func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any, _ map[string]map[string]any, current map[string]any, _ map[string]any) (*sdk.StepResult, error) {
+	slog.Debug("executing bento step", "step", s.name)
+
 	// Merge current + triggerData as the step input.
 	input := make(map[string]any, len(triggerData)+len(current))
 	for k, v := range triggerData {
@@ -53,11 +56,13 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	// If no processors configured, pass data through unchanged.
 	if s.processors == "" {
+		slog.Debug("bento step passthrough (no processors)", "step", s.name)
 		return &sdk.StepResult{Output: input}, nil
 	}
 
 	inputBytes, err := json.Marshal(input)
 	if err != nil {
+		slog.Error("failed to marshal step input", "error", err, "step", s.name)
 		return nil, fmt.Errorf("step.bento %q: marshal input: %w", s.name, err)
 	}
 
@@ -78,9 +83,12 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	resultCh := make(chan map[string]any, 1)
 	errCh := make(chan error, 1)
 
+	stepName := s.name
+
 	if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 		raw, err := msg.AsBytes()
 		if err != nil {
+			slog.Error("failed to read processed message", "error", err, "step", stepName)
 			errCh <- fmt.Errorf("read processed message: %w", err)
 			return err
 		}
@@ -113,6 +121,7 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	inputMsg := service.NewMessage(inputBytes)
 	if err := producerFn(ctx, inputMsg); err != nil {
 		streamCancel()
+		slog.Error("failed to send message to bento processor", "error", err, "step", s.name)
 		return nil, fmt.Errorf("step.bento %q: send input message: %w", s.name, err)
 	}
 
@@ -120,6 +129,7 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	var output map[string]any
 	select {
 	case output = <-resultCh:
+		slog.Debug("bento step completed", "step", s.name)
 	case err := <-errCh:
 		streamCancel()
 		return nil, err

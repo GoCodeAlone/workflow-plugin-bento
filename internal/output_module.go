@@ -67,6 +67,8 @@ func (m *outputModule) Start(ctx context.Context) error {
 		return fmt.Errorf("bento.output %q: no MessageSubscriber set; ensure the host injects one", m.name)
 	}
 
+	slog.Info("starting bento output", "module", m.name, "source_topic", m.sourceTopic)
+
 	// Build output YAML from the "output" key of the config.
 	outputCfg, ok := m.config["output"].(map[string]any)
 	if !ok {
@@ -98,22 +100,32 @@ func (m *outputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
+	moduleName := m.name
+
 	go func() {
 		defer close(m.done)
 		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento output stream runtime error", "name", m.name, "error", err)
+			slog.Error("bento output stream failed", "error", err, "module", moduleName)
 		}
 	}()
+
+	slog.Info("bento output running", "module", m.name)
 
 	// Subscribe to the host EventBus topic. When messages arrive, forward them
 	// to the Bento producer.
 	producerFnRef := m.producerFn
 	if err := m.subscriber.Subscribe(m.sourceTopic, func(payload []byte, metadata map[string]string) error {
+		slog.Debug("sending message to bento output", "module", moduleName, "topic", m.sourceTopic, "size", len(payload))
+
 		msg := service.NewMessage(payload)
 		for k, v := range metadata {
 			msg.MetaSet(k, v)
 		}
-		return producerFnRef(runCtx, msg)
+		sendErr := producerFnRef(runCtx, msg)
+		if sendErr != nil {
+			slog.Error("failed to send message to bento output", "error", sendErr, "module", moduleName)
+		}
+		return sendErr
 	}); err != nil {
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
@@ -123,11 +135,14 @@ func (m *outputModule) Start(ctx context.Context) error {
 
 // Stop unsubscribes, stops the stream, and waits for the goroutine to exit.
 func (m *outputModule) Stop(ctx context.Context) error {
+	slog.Info("stopping bento output", "module", m.name)
+
 	if m.subscriber != nil {
 		_ = m.subscriber.Unsubscribe(m.sourceTopic)
 	}
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
+			slog.Error("error stopping bento output", "error", err, "module", m.name)
 			return fmt.Errorf("bento.output %q: stop: %w", m.name, err)
 		}
 	}
@@ -136,6 +151,7 @@ func (m *outputModule) Stop(ctx context.Context) error {
 	}
 	select {
 	case <-m.done:
+		slog.Info("bento output stopped", "module", m.name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}

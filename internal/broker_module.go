@@ -68,10 +68,15 @@ func (m *brokerModule) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	slog.Info("stopping bento broker", "module", m.name, "topics", len(m.streams))
+
 	var firstErr error
 	for topic, stream := range m.streams {
 		if err := stream.Stop(ctx); err != nil && firstErr == nil {
+			slog.Error("failed to stop broker stream", "error", err, "module", m.name, "topic", topic)
 			firstErr = fmt.Errorf("bento.broker %q: stop stream for topic %q: %w", m.name, topic, err)
+		} else {
+			slog.Info("broker stream stopped", "module", m.name, "topic", topic)
 		}
 	}
 	m.streams = make(map[string]*service.Stream)
@@ -96,6 +101,8 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 		return s, nil
 	}
 
+	slog.Info("creating broker stream", "module", m.name, "topic", topic, "transport", m.transport)
+
 	// Build a simple in-memory stream that holds messages for this topic.
 	// The actual transport is configured via transportConfig / transport.
 	builder := service.NewStreamBuilder()
@@ -112,10 +119,13 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 	}
 
 	pub := m.publisher
+	moduleName := m.name
+
 	if pub != nil {
 		if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 			payload, msgErr := msg.AsBytes()
 			if msgErr != nil {
+				slog.Error("failed to read broker message", "error", msgErr, "module", moduleName, "topic", topic)
 				return msgErr
 			}
 			meta := map[string]string{}
@@ -123,7 +133,13 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 				meta[k] = fmt.Sprintf("%v", v)
 				return nil
 			})
+
+			slog.Debug("broker forwarding message", "module", moduleName, "topic", topic, "size", len(payload))
+
 			_, pubErr := pub.Publish(topic, payload, meta)
+			if pubErr != nil {
+				slog.Error("failed to publish from broker", "error", pubErr, "module", moduleName, "topic", topic)
+			}
 			return pubErr
 		}); err != nil {
 			return nil, fmt.Errorf("add consumer for topic %q: %w", topic, err)
@@ -137,10 +153,11 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 
 	go func() {
 		if err := stream.Run(ctx); err != nil && ctx.Err() == nil {
-			slog.Error("bento broker stream runtime error", "name", m.name, "topic", topic, "error", err)
+			slog.Error("broker stream failed", "error", err, "module", moduleName, "topic", topic)
 		}
 	}()
 
 	m.streams[topic] = stream
+	slog.Info("broker stream created", "module", m.name, "topic", topic)
 	return stream, nil
 }
