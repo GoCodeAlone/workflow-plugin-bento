@@ -152,6 +152,58 @@ func TestStreamModule_StartStop(t *testing.T) {
 	})
 }
 
+func TestStreamModule_Health(t *testing.T) {
+	m, _ := newStreamModule("test-stream", map[string]any{
+		"input": map[string]any{
+			"generate": map[string]any{
+				"mapping":  `root = {"test": "data"}`,
+				"count":    0,
+				"interval": "1s",
+			},
+		},
+		"output": map[string]any{
+			"drop": map[string]any{},
+		},
+	})
+
+	// Before start: unhealthy
+	report := m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy before start, got %s", report.StatusText)
+	}
+
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Allow the stream goroutine to call Run before checking health / stopping.
+	time.Sleep(50 * time.Millisecond)
+
+	// After start: healthy
+	report = m.Health()
+	if report.Status != HealthStatusHealthy {
+		t.Errorf("expected healthy after start, got %s", report.StatusText)
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := m.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	// After stop: unhealthy
+	report = m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy after stop, got %s", report.StatusText)
+	}
+}
+
 func TestStreamModule_StopWithoutStart(t *testing.T) {
 	m, _ := newStreamModule("test", map[string]any{"input": map[string]any{}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
