@@ -80,6 +80,8 @@ func (m *brokerModule) Stop(ctx context.Context) error {
 
 // ensureStream returns (creating if necessary) a running stream for topic.
 // This is used internally when the broker needs a dedicated in-process pipe.
+//
+//nolint:unused // Reserved for future on-demand topic routing implementation.
 func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service.Stream, error) {
 	m.mu.RLock()
 	if s, ok := m.streams[topic]; ok {
