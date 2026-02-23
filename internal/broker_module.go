@@ -68,6 +68,7 @@ func (m *brokerModule) Init() error {
 // Start is a no-op; individual per-topic streams are created on demand.
 func (m *brokerModule) Start(_ context.Context) error {
 	m.health.SetRunning(true)
+	m.metrics.MarkStarted()
 	m.log.LogStreamStart(m.transport)
 	return nil
 }
@@ -88,6 +89,7 @@ func (m *brokerModule) Stop(ctx context.Context) error {
 	m.streams = make(map[string]*service.Stream)
 
 	m.health.SetRunning(false)
+	m.metrics.MarkStopped()
 	snap := m.metrics.Snapshot()
 	m.log.LogStreamStop(snap.MessagesIn+snap.MessagesOut,
 		slog.String("transport", m.transport),
@@ -174,9 +176,19 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 	)
 
 	go func() {
-		if runErr := stream.Run(ctx); runErr != nil && ctx.Err() == nil {
-			metrics.RecordError()
-			log.LogStreamError(runErr, slog.String("topic", topic))
+		if runErr := stream.Run(ctx); ctx.Err() == nil {
+			// Stream exited without context cancellation; remove it from the
+			// active streams map so it can be recreated on next access.
+			m.mu.Lock()
+			delete(m.streams, topic)
+			m.mu.Unlock()
+			if runErr != nil {
+				metrics.RecordError()
+				log.LogStreamError(runErr, slog.String("topic", topic))
+			}
+			log.LogTopicEvent("stream_stopped", topic,
+				slog.String("reason", "run_exited"),
+			)
 		}
 	}()
 

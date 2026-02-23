@@ -62,6 +62,7 @@ func (m *streamModule) Start(ctx context.Context) error {
 	m.cancel = cancel
 
 	m.health.SetRunning(true)
+	m.metrics.MarkStarted()
 
 	m.log.LogStreamStart("bento",
 		slog.Int("config_keys", len(m.config)),
@@ -69,9 +70,12 @@ func (m *streamModule) Start(ctx context.Context) error {
 
 	go func() {
 		defer close(m.done)
-		if runErr := stream.Run(runCtx); runErr != nil && runCtx.Err() == nil {
-			m.metrics.RecordError()
-			m.log.LogStreamError(runErr)
+		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
+			m.health.SetRunning(false)
+			if runErr != nil {
+				m.metrics.RecordError()
+				m.log.LogStreamError(runErr)
+			}
 		}
 	}()
 
@@ -97,9 +101,12 @@ func (m *streamModule) Stop(ctx context.Context) error {
 	}
 
 	m.health.SetRunning(false)
+	m.metrics.MarkStopped()
 	snap := m.metrics.Snapshot()
-	m.log.LogStreamStop(snap.Errors,
+	// Stream modules don't intercept individual messages, so messages_processed is 0.
+	m.log.LogStreamStop(0,
 		slog.Duration("uptime", snap.Uptime),
+		slog.Int64("errors", snap.Errors),
 	)
 
 	return nil

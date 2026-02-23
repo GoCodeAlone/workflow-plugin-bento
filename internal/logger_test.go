@@ -189,6 +189,7 @@ func TestMetricsRecordError(t *testing.T) {
 
 func TestMetricsUptime(t *testing.T) {
 	m := newStreamMetrics()
+	m.MarkStarted()
 	time.Sleep(5 * time.Millisecond)
 	uptime := m.Uptime()
 
@@ -215,6 +216,7 @@ func TestMetricsLastMessageTime(t *testing.T) {
 
 func TestMetricsSnapshot(t *testing.T) {
 	m := newStreamMetrics()
+	m.MarkStarted()
 	m.RecordMessageIn()
 	m.RecordMessageIn()
 	m.RecordMessageOut()
