@@ -109,6 +109,7 @@ func (m *streamModule) Stop(ctx context.Context) error {
 
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
+			m.setStatus(streamErrored)
 			slog.Error("error stopping bento stream", "error", err, "module", m.name)
 			return fmt.Errorf("bento.stream %q: stop: %w", m.name, err)
 		}
