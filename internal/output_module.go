@@ -101,19 +101,10 @@ func (m *outputModule) Start(ctx context.Context) error {
 	m.cancel = cancel
 
 	moduleName := m.name
-
-	go func() {
-		defer close(m.done)
-		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento output stream failed", "error", err, "module", moduleName)
-		}
-	}()
-
-	slog.Info("bento output running", "module", m.name)
-
-	// Subscribe to the host EventBus topic. When messages arrive, forward them
-	// to the Bento producer.
 	producerFnRef := m.producerFn
+
+	// Subscribe before launching the goroutine so that if Subscribe fails we
+	// have not yet started the stream and there is no goroutine to clean up.
 	if err := m.subscriber.Subscribe(m.sourceTopic, func(payload []byte, metadata map[string]string) error {
 		slog.Debug("sending message to bento output", "module", moduleName, "topic", m.sourceTopic, "size", len(payload))
 
@@ -127,8 +118,18 @@ func (m *outputModule) Start(ctx context.Context) error {
 		}
 		return sendErr
 	}); err != nil {
+		cancel()
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
+
+	go func() {
+		defer close(m.done)
+		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
+			slog.Error("bento output stream failed", "error", err, "module", moduleName)
+		}
+	}()
+
+	slog.Info("bento output running", "module", m.name)
 
 	return nil
 }
@@ -138,7 +139,9 @@ func (m *outputModule) Stop(ctx context.Context) error {
 	slog.Info("stopping bento output", "module", m.name)
 
 	if m.subscriber != nil {
-		_ = m.subscriber.Unsubscribe(m.sourceTopic)
+		if err := m.subscriber.Unsubscribe(m.sourceTopic); err != nil {
+			slog.Error("error unsubscribing from source topic", "error", err, "module", m.name, "topic", m.sourceTopic)
+		}
 	}
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {

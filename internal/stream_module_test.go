@@ -169,3 +169,128 @@ func TestStreamModule_StopWithoutStart(t *testing.T) {
 		t.Errorf("Stop() without Start: expected DeadlineExceeded, got %v", err)
 	}
 }
+
+func TestStreamModule_StatusTransitions(t *testing.T) {
+	t.Run("initial status is stopped", func(t *testing.T) {
+		m, err := newStreamModule("test-stream", map[string]any{
+			"input":  map[string]any{"generate": map[string]any{}},
+			"output": map[string]any{"drop": map[string]any{}},
+		})
+		if err != nil {
+			t.Fatalf("newStreamModule() error = %v", err)
+		}
+		if got := m.Status(); got != streamStopped {
+			t.Errorf("initial status = %q, want %q", got, streamStopped)
+		}
+	})
+
+	t.Run("status is running after successful start", func(t *testing.T) {
+		m, err := newStreamModule("test-stream", map[string]any{
+			"input": map[string]any{
+				"generate": map[string]any{
+					"mapping":  `root = {"test": "data"}`,
+					"count":    0,
+					"interval": "1s",
+				},
+			},
+			"output": map[string]any{
+				"drop": map[string]any{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("newStreamModule() error = %v", err)
+		}
+
+		if err := m.Init(); err != nil {
+			t.Fatalf("Init() error = %v", err)
+		}
+
+		ctx := context.Background()
+		if err := m.Start(ctx); err != nil {
+			t.Fatalf("Start() error = %v", err)
+		}
+
+		if got := m.Status(); got != streamRunning {
+			t.Errorf("status after Start = %q, want %q", got, streamRunning)
+		}
+
+		// Allow goroutine to begin running before stopping.
+		time.Sleep(50 * time.Millisecond)
+
+		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = m.Stop(stopCtx)
+	})
+
+	t.Run("status is stopped after successful stop", func(t *testing.T) {
+		m, err := newStreamModule("test-stream", map[string]any{
+			"input": map[string]any{
+				"generate": map[string]any{
+					"mapping":  `root = {"test": "data"}`,
+					"count":    0,
+					"interval": "1s",
+				},
+			},
+			"output": map[string]any{
+				"drop": map[string]any{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("newStreamModule() error = %v", err)
+		}
+
+		if err := m.Init(); err != nil {
+			t.Fatalf("Init() error = %v", err)
+		}
+
+		ctx := context.Background()
+		if err := m.Start(ctx); err != nil {
+			t.Fatalf("Start() error = %v", err)
+		}
+
+		// Allow goroutine to begin running before stopping.
+		time.Sleep(50 * time.Millisecond)
+
+		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := m.Stop(stopCtx); err != nil {
+			t.Fatalf("Stop() error = %v", err)
+		}
+
+		if got := m.Status(); got != streamStopped {
+			t.Errorf("status after Stop = %q, want %q", got, streamStopped)
+		}
+	})
+
+	t.Run("status is errored after failed start", func(t *testing.T) {
+		m, err := newStreamModule("bad-stream", map[string]any{
+			"input": map[string]any{
+				"unknown_input_type": map[string]any{
+					"invalid": "config",
+				},
+			},
+			"output": map[string]any{
+				"drop": map[string]any{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("newStreamModule() error = %v", err)
+		}
+
+		if err := m.Init(); err != nil {
+			t.Fatalf("Init() error = %v", err)
+		}
+
+		ctx := context.Background()
+		if err := m.Start(ctx); err == nil {
+			t.Error("Start() expected error for invalid config, got nil")
+			_ = m.Stop(context.Background())
+			return
+		}
+
+		if got := m.Status(); got != streamErrored {
+			t.Errorf("status after failed Start = %q, want %q", got, streamErrored)
+		}
+	})
+}
