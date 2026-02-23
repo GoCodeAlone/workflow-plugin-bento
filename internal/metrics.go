@@ -23,9 +23,7 @@ type StreamMetrics struct {
 // to the current wall clock.
 func newStreamMetrics() *StreamMetrics {
 	m := &StreamMetrics{}
-	m.mu.Lock()
 	m.startTime = time.Now()
-	m.mu.Unlock()
 	return m
 }
 
