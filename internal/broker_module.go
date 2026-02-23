@@ -72,12 +72,14 @@ func (m *brokerModule) Stop(ctx context.Context) error {
 
 	var firstErr error
 	for topic, stream := range m.streams {
-		if err := stream.Stop(ctx); err != nil && firstErr == nil {
+		if err := stream.Stop(ctx); err != nil {
 			slog.Error("failed to stop broker stream", "error", err, "module", m.name, "topic", topic)
-			firstErr = fmt.Errorf("bento.broker %q: stop stream for topic %q: %w", m.name, topic, err)
-		} else {
-			slog.Info("broker stream stopped", "module", m.name, "topic", topic)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("bento.broker %q: stop stream for topic %q: %w", m.name, topic, err)
+			}
+			continue
 		}
+		slog.Info("broker stream stopped", "module", m.name, "topic", topic)
 	}
 	m.streams = make(map[string]*service.Stream)
 	return firstErr
