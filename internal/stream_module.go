@@ -98,9 +98,8 @@ func (m *streamModule) Stop(ctx context.Context) error {
 
 	m.health.SetRunning(false)
 	snap := m.metrics.Snapshot()
-	m.log.LogStreamStop(snap.MessagesIn,
+	m.log.LogStreamStop(snap.Errors,
 		slog.Duration("uptime", snap.Uptime),
-		slog.Int64("errors", snap.Errors),
 	)
 
 	return nil
