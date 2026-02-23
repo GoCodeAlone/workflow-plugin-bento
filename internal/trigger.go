@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
@@ -147,7 +148,8 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-				_ = err
+				slog.Error("bento trigger stream runtime error", "workflow", workflow, "action", action, "error", err)
+				_ = cb("stream_error", map[string]any{"error": err.Error(), "workflow": workflow, "action": action})
 			}
 		}()
 	}
