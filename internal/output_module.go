@@ -105,22 +105,9 @@ func (m *outputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	m.health.SetRunning(true)
-	m.log.LogStreamStart("bento.output",
-		slog.String("source_topic", m.sourceTopic),
-		slog.String("source_broker", m.sourceBroker),
-	)
-
-	go func() {
-		defer close(m.done)
-		if runErr := stream.Run(runCtx); runErr != nil && runCtx.Err() == nil {
-			m.metrics.RecordError()
-			m.log.LogStreamError(runErr)
-		}
-	}()
-
-	// Subscribe to the host EventBus topic. When messages arrive, forward them
-	// to the Bento producer.
+	// Subscribe to the host EventBus topic before starting the stream. When
+	// messages arrive, forward them to the Bento producer. Subscribing first
+	// avoids leaking the stream goroutine if Subscribe returns an error.
 	producerFnRef := m.producerFn
 	metrics := m.metrics
 	log := m.log
@@ -140,8 +127,28 @@ func (m *outputModule) Start(ctx context.Context) error {
 		log.LogMessageProcessed(sourceTopic)
 		return nil
 	}); err != nil {
+		// Cancel the context since the stream goroutine was never launched.
+		cancel()
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
+
+	m.health.SetRunning(true)
+	m.metrics.MarkStarted()
+	m.log.LogStreamStart("bento.output",
+		slog.String("source_topic", m.sourceTopic),
+		slog.String("source_broker", m.sourceBroker),
+	)
+
+	go func() {
+		defer close(m.done)
+		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
+			m.health.SetRunning(false)
+			if runErr != nil {
+				m.metrics.RecordError()
+				m.log.LogStreamError(runErr)
+			}
+		}
+	}()
 
 	return nil
 }
@@ -168,6 +175,7 @@ func (m *outputModule) Stop(ctx context.Context) error {
 	}
 
 	m.health.SetRunning(false)
+	m.metrics.MarkStopped()
 	snap := m.metrics.Snapshot()
 	m.log.LogStreamStop(snap.MessagesIn,
 		slog.String("source_topic", m.sourceTopic),
