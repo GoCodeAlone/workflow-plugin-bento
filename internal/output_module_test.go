@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 // mockMessageSubscriber captures subscriptions and allows simulating message delivery.

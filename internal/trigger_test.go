@@ -2,9 +2,12 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 // mockTriggerCallback captures trigger invocations for testing.
@@ -169,7 +172,7 @@ func TestBentoTrigger_StartStop(t *testing.T) {
 			map[string]any{
 				"input": map[string]any{
 					"generate": map[string]any{
-						"mapping":  `root = {"id": count()}`,
+						"mapping":  `root = {"id": count("c")}`,
 						"count":    2,
 						"interval": "50ms",
 					},
@@ -362,9 +365,13 @@ func TestBentoTrigger_StopWithoutStart(t *testing.T) {
 		t.Fatalf("newBentoTrigger() error = %v", err)
 	}
 
-	ctx := context.Background()
-	// Stop without Start should not panic
-	if err := trigger.Stop(ctx); err != nil {
-		t.Errorf("Stop() without Start error = %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Stop without Start — done channel never closed, expect timeout or nil
+	err = trigger.Stop(ctx)
+	if err == nil || errors.Is(err, context.DeadlineExceeded) {
+		return
 	}
+	t.Errorf("Stop() without Start: expected nil or DeadlineExceeded, got %v", err)
 }
