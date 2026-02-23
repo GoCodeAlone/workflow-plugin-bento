@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 func TestNewStreamModule(t *testing.T) {

@@ -75,35 +75,30 @@ func TestBentoPlugin_CreateModule(t *testing.T) {
 		typeName string
 		name     string
 		config   map[string]any
-		wantType string
 		wantErr  bool
 	}{
 		{
 			typeName: "bento.stream",
 			name:     "test-stream",
 			config:   map[string]any{},
-			wantType: "*internal.streamModule",
 			wantErr:  false,
 		},
 		{
 			typeName: "bento.input",
 			name:     "test-input",
 			config:   map[string]any{},
-			wantType: "*internal.inputModule",
 			wantErr:  false,
 		},
 		{
 			typeName: "bento.output",
 			name:     "test-output",
 			config:   map[string]any{},
-			wantType: "*internal.outputModule",
 			wantErr:  false,
 		},
 		{
 			typeName: "bento.broker",
 			name:     "test-broker",
 			config:   map[string]any{},
-			wantType: "*internal.brokerModule",
 			wantErr:  false,
 		},
 		{

@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 func TestNewBrokerModule(t *testing.T) {
@@ -169,6 +167,8 @@ func TestBrokerModule_Health(t *testing.T) {
 }
 
 func TestBrokerModule_EnsureStream(t *testing.T) {
+	// Use generate transport so ensureStream can build a valid Bento stream.
+	// count=0 means infinite generation; the stream will be stopped at the end.
 	m, _ := newBrokerModule("test-broker", map[string]any{
 		"transport": "generate",
 		"transport_config": map[string]any{
@@ -247,6 +247,7 @@ func TestBrokerModule_EnsureStream(t *testing.T) {
 }
 
 func TestBrokerModule_ConcurrentEnsureStream(t *testing.T) {
+	// Use generate transport so ensureStream can build a valid Bento stream.
 	m, _ := newBrokerModule("test-broker", map[string]any{
 		"transport": "generate",
 		"transport_config": map[string]any{
@@ -319,6 +320,7 @@ func TestBrokerModule_ConcurrentEnsureStream(t *testing.T) {
 }
 
 func TestBrokerModule_EnsureStreamWithoutPublisher(t *testing.T) {
+	// Use generate transport so ensureStream can build a valid Bento stream.
 	m, _ := newBrokerModule("test-broker", map[string]any{
 		"transport": "generate",
 		"transport_config": map[string]any{
