@@ -39,7 +39,7 @@ func messageToMap(msg *service.Message) (map[string]any, error) {
 
 	// Copy metadata.
 	meta := map[string]any{}
-	msg.MetaWalkMut(func(key string, value any) error {
+	_ = msg.MetaWalkMut(func(key string, value any) error {
 		meta[key] = value
 		return nil
 	})
