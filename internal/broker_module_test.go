@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 func TestNewBrokerModule(t *testing.T) {
@@ -130,12 +128,7 @@ func TestBrokerModule_StartStop(t *testing.T) {
 
 func TestBrokerModule_EnsureStream(t *testing.T) {
 	m, _ := newBrokerModule("test-broker", map[string]any{
-		"transport": "generate",
-		"transport_config": map[string]any{
-			"mapping":  `root = {"test": "data"}`,
-			"count":    0,
-			"interval": "1s",
-		},
+		"transport": "memory",
 	})
 
 	if err := m.Init(); err != nil {
@@ -186,9 +179,6 @@ func TestBrokerModule_EnsureStream(t *testing.T) {
 		t.Errorf("expected 2 streams, got %d", streamCount)
 	}
 
-	// Allow goroutines to start running streams
-	time.Sleep(50 * time.Millisecond)
-
 	// Stop should clean up all streams
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -208,12 +198,7 @@ func TestBrokerModule_EnsureStream(t *testing.T) {
 
 func TestBrokerModule_ConcurrentEnsureStream(t *testing.T) {
 	m, _ := newBrokerModule("test-broker", map[string]any{
-		"transport": "generate",
-		"transport_config": map[string]any{
-			"mapping":  `root = {"test": "data"}`,
-			"count":    0,
-			"interval": "1s",
-		},
+		"transport": "memory",
 	})
 
 	if err := m.Init(); err != nil {
@@ -280,12 +265,7 @@ func TestBrokerModule_ConcurrentEnsureStream(t *testing.T) {
 
 func TestBrokerModule_EnsureStreamWithoutPublisher(t *testing.T) {
 	m, _ := newBrokerModule("test-broker", map[string]any{
-		"transport": "generate",
-		"transport_config": map[string]any{
-			"mapping":  `root = {"test": "data"}`,
-			"count":    0,
-			"interval": "1s",
-		},
+		"transport": "memory",
 	})
 
 	if err := m.Init(); err != nil {

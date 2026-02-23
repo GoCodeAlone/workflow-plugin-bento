@@ -6,8 +6,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 // mockTriggerCallback captures trigger invocations for testing.
@@ -172,7 +170,7 @@ func TestBentoTrigger_StartStop(t *testing.T) {
 			map[string]any{
 				"input": map[string]any{
 					"generate": map[string]any{
-						"mapping":  `root = {"id": count("c")}`,
+						"mapping":  `root = {"id": count("trigger_id")}`,
 						"count":    2,
 						"interval": "50ms",
 					},
@@ -191,8 +189,14 @@ func TestBentoTrigger_StartStop(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Wait for messages to be processed
-	time.Sleep(300 * time.Millisecond)
+	// Poll until 2 callbacks are observed or deadline is reached.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(cb.GetCalls()) >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -317,10 +321,22 @@ func TestBentoTrigger_NoSubscriptions(t *testing.T) {
 }
 
 func TestBentoTrigger_CallbackError(t *testing.T) {
-	// Callback that returns error
-	var callbackErr error
+	// Callback that errors on the first invocation and succeeds on subsequent
+	// ones. This exercises the error path while still allowing the stream to
+	// terminate cleanly (Bento retries the NACKed message once, then continues).
+	var (
+		cbMu    sync.Mutex
+		cbCount int
+	)
 	errorCb := func(action string, data map[string]any) error {
-		return callbackErr
+		cbMu.Lock()
+		cbCount++
+		count := cbCount
+		cbMu.Unlock()
+		if count == 1 {
+			return errors.New("first callback error")
+		}
+		return nil
 	}
 
 	trigger, err := newBentoTrigger(map[string]any{
@@ -328,8 +344,9 @@ func TestBentoTrigger_CallbackError(t *testing.T) {
 			map[string]any{
 				"input": map[string]any{
 					"generate": map[string]any{
-						"mapping": `root = {"test": "data"}`,
-						"count":   1,
+						"mapping":  `root = {"test": "data"}`,
+						"count":    3,
+						"interval": "10ms",
 					},
 				},
 				"workflow": "test",
@@ -340,21 +357,36 @@ func TestBentoTrigger_CallbackError(t *testing.T) {
 		t.Fatalf("newBentoTrigger() error = %v", err)
 	}
 
-	callbackErr = nil // First call succeeds
-
 	ctx := context.Background()
 	if err := trigger.Start(ctx); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// Poll until at least 2 callbacks are observed (1 error + 1 success).
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		cbMu.Lock()
+		count := cbCount
+		cbMu.Unlock()
+		if count >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
-	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Should stop cleanly even if callback had errors
+	// Should stop cleanly even when a callback returned an error.
 	if err := trigger.Stop(stopCtx); err != nil {
 		t.Errorf("Stop() error = %v", err)
+	}
+
+	cbMu.Lock()
+	count := cbCount
+	cbMu.Unlock()
+	if count == 0 {
+		t.Error("expected callback to be invoked at least once")
 	}
 }
 
@@ -365,13 +397,9 @@ func TestBentoTrigger_StopWithoutStart(t *testing.T) {
 		t.Fatalf("newBentoTrigger() error = %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	// Stop without Start — done channel never closed, expect timeout or nil
-	err = trigger.Stop(ctx)
-	if err == nil || errors.Is(err, context.DeadlineExceeded) {
-		return
+	ctx := context.Background()
+	// Stop without Start should not panic
+	if err := trigger.Stop(ctx); err != nil {
+		t.Errorf("Stop() without Start error = %v", err)
 	}
-	t.Errorf("Stop() without Start: expected nil or DeadlineExceeded, got %v", err)
 }
