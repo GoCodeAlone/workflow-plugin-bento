@@ -224,4 +224,29 @@ func TestRoundTrip_MessageToMapToMessage(t *testing.T) {
 	if reconstructed == nil {
 		t.Fatal("mapToMessage() returned nil")
 	}
+
+	// Verify body is preserved.
+	raw, err := reconstructed.AsBytes()
+	if err != nil {
+		t.Fatalf("reconstructed.AsBytes() returned error: %v", err)
+	}
+	body, ok := m["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected body to be map, got %T", m["body"])
+	}
+	if body["name"] != "test" {
+		t.Errorf("round-trip: body[name] = %v, want %q", body["name"], "test")
+	}
+	if len(raw) == 0 {
+		t.Error("round-trip: reconstructed message bytes should not be empty")
+	}
+
+	// Verify metadata is preserved.
+	val, exists := reconstructed.MetaGet("source")
+	if !exists {
+		t.Fatal("round-trip: metadata key 'source' not found on reconstructed message")
+	}
+	if val != "unit-test" {
+		t.Errorf("round-trip: metadata[source] = %q, want %q", val, "unit-test")
+	}
 }

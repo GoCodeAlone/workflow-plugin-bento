@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -170,7 +171,7 @@ func TestProcessorStep_Execute_WithBloblangPassthrough(t *testing.T) {
 
 func TestProcessorStep_Execute_ContextCancelled(t *testing.T) {
 	config := map[string]any{
-		"processors": `- bloblang: "root = this"`,
+		"processors": `bloblang: "root = this"`,
 	}
 
 	s, _ := newProcessorStep("test", config)
@@ -179,9 +180,10 @@ func TestProcessorStep_Execute_ContextCancelled(t *testing.T) {
 	cancel() // Cancel immediately.
 
 	_, err := s.Execute(ctx, map[string]any{"key": "val"}, nil, nil, nil)
-	// May succeed (if stream runs fast enough) or return context.Canceled — both are acceptable.
-	// We just verify it does not panic or block forever.
-	_ = err
+	// May succeed (if stream runs fast enough) or return a context.Canceled error — both are acceptable.
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Errorf("Execute() with cancelled context: unexpected error type %v", err)
+	}
 }
 
 func TestProcessorStep_Execute_StopPipelineIsFalse(t *testing.T) {

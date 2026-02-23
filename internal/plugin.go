@@ -136,7 +136,7 @@ func (p *bentoPlugin) ModuleSchemas() []sdk.ModuleSchemaData {
 			Category:    "transform",
 			Description: "Runs data through Bento processors (Bloblang, jmespath, etc.) as a pipeline step.",
 			ConfigFields: []sdk.ConfigField{
-				{Name: "processors", Type: "string", Description: "YAML string or map defining Bento processors", Required: true},
+				{Name: "processors", Type: "string", Description: "YAML string or map defining Bento processors"},
 			},
 		},
 	}

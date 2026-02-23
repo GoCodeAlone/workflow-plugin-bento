@@ -32,8 +32,11 @@ func TestBentoPlugin_Manifest(t *testing.T) {
 }
 
 func TestBentoPlugin_ModuleTypes(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
-	types := p.ModuleTypes()
+	mp, ok := NewBentoPlugin().(sdk.ModuleProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.ModuleProvider")
+	}
+	types := mp.ModuleTypes()
 
 	want := map[string]bool{
 		"bento.stream": false,
@@ -58,8 +61,11 @@ func TestBentoPlugin_ModuleTypes(t *testing.T) {
 }
 
 func TestBentoPlugin_StepTypes(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
-	types := p.StepTypes()
+	sp, ok := NewBentoPlugin().(sdk.StepProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.StepProvider")
+	}
+	types := sp.StepTypes()
 
 	if len(types) != 1 {
 		t.Fatalf("StepTypes() returned %d types, want 1", len(types))
@@ -70,8 +76,11 @@ func TestBentoPlugin_StepTypes(t *testing.T) {
 }
 
 func TestBentoPlugin_TriggerTypes(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
-	types := p.TriggerTypes()
+	tp, ok := NewBentoPlugin().(sdk.TriggerProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.TriggerProvider")
+	}
+	types := tp.TriggerTypes()
 
 	if len(types) != 1 {
 		t.Fatalf("TriggerTypes() returned %d types, want 1", len(types))
@@ -82,7 +91,10 @@ func TestBentoPlugin_TriggerTypes(t *testing.T) {
 }
 
 func TestBentoPlugin_CreateModule_ValidTypes(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
+	mp, ok := NewBentoPlugin().(sdk.ModuleProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.ModuleProvider")
+	}
 
 	tests := []struct {
 		typeName string
@@ -117,7 +129,7 @@ func TestBentoPlugin_CreateModule_ValidTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.typeName, func(t *testing.T) {
-			mod, err := p.CreateModule(tt.typeName, "test-"+tt.typeName, tt.config)
+			mod, err := mp.CreateModule(tt.typeName, "test-"+tt.typeName, tt.config)
 			if err != nil {
 				t.Fatalf("CreateModule(%q) returned error: %v", tt.typeName, err)
 			}
@@ -129,9 +141,12 @@ func TestBentoPlugin_CreateModule_ValidTypes(t *testing.T) {
 }
 
 func TestBentoPlugin_CreateModule_UnknownType(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
+	mp, ok := NewBentoPlugin().(sdk.ModuleProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.ModuleProvider")
+	}
 
-	mod, err := p.CreateModule("bento.unknown", "test", map[string]any{})
+	mod, err := mp.CreateModule("bento.unknown", "test", map[string]any{})
 	if err == nil {
 		t.Fatal("CreateModule with unknown type should return error")
 	}
@@ -141,9 +156,12 @@ func TestBentoPlugin_CreateModule_UnknownType(t *testing.T) {
 }
 
 func TestBentoPlugin_CreateStep_ValidType(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
+	sp, ok := NewBentoPlugin().(sdk.StepProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.StepProvider")
+	}
 
-	step, err := p.CreateStep("step.bento", "test-step", map[string]any{})
+	step, err := sp.CreateStep("step.bento", "test-step", map[string]any{})
 	if err != nil {
 		t.Fatalf("CreateStep(step.bento) returned error: %v", err)
 	}
@@ -153,9 +171,12 @@ func TestBentoPlugin_CreateStep_ValidType(t *testing.T) {
 }
 
 func TestBentoPlugin_CreateStep_UnknownType(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
+	sp, ok := NewBentoPlugin().(sdk.StepProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.StepProvider")
+	}
 
-	step, err := p.CreateStep("step.unknown", "test", map[string]any{})
+	step, err := sp.CreateStep("step.unknown", "test", map[string]any{})
 	if err == nil {
 		t.Fatal("CreateStep with unknown type should return error")
 	}
@@ -165,10 +186,13 @@ func TestBentoPlugin_CreateStep_UnknownType(t *testing.T) {
 }
 
 func TestBentoPlugin_CreateTrigger_ValidType(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
+	tp, ok := NewBentoPlugin().(sdk.TriggerProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.TriggerProvider")
+	}
 
 	cb := func(action string, data map[string]any) error { return nil }
-	trigger, err := p.CreateTrigger("bento", map[string]any{}, cb)
+	trigger, err := tp.CreateTrigger("bento", map[string]any{}, cb)
 	if err != nil {
 		t.Fatalf("CreateTrigger(bento) returned error: %v", err)
 	}
@@ -178,10 +202,13 @@ func TestBentoPlugin_CreateTrigger_ValidType(t *testing.T) {
 }
 
 func TestBentoPlugin_CreateTrigger_UnknownType(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
+	tp, ok := NewBentoPlugin().(sdk.TriggerProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.TriggerProvider")
+	}
 
 	cb := func(action string, data map[string]any) error { return nil }
-	trigger, err := p.CreateTrigger("unknown", map[string]any{}, cb)
+	trigger, err := tp.CreateTrigger("unknown", map[string]any{}, cb)
 	if err == nil {
 		t.Fatal("CreateTrigger with unknown type should return error")
 	}
@@ -191,8 +218,11 @@ func TestBentoPlugin_CreateTrigger_UnknownType(t *testing.T) {
 }
 
 func TestBentoPlugin_ModuleSchemas(t *testing.T) {
-	p := NewBentoPlugin().(*bentoPlugin)
-	schemas := p.ModuleSchemas()
+	scp, ok := NewBentoPlugin().(sdk.SchemaProvider)
+	if !ok {
+		t.Fatal("NewBentoPlugin() does not implement sdk.SchemaProvider")
+	}
+	schemas := scp.ModuleSchemas()
 
 	if len(schemas) == 0 {
 		t.Fatal("ModuleSchemas() returned empty slice")
