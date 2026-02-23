@@ -3,10 +3,9 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
-
-	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 func TestNewProcessorStep(t *testing.T) {
@@ -181,7 +180,7 @@ func TestProcessorStep_ExecuteWithInvalidBloblang(t *testing.T) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	result, err := s.Execute(ctx, map[string]any{"data": "test"}, nil, map[string]any{}, nil)
@@ -256,9 +255,8 @@ func TestProcessorStep_ExecuteWithContextCancel(t *testing.T) {
 
 	if err == nil {
 		t.Error("Execute() expected error with cancelled context")
-	}
-	if err != context.Canceled {
-		t.Logf("got error: %v", err)
+	} else if !errors.Is(err, context.Canceled) {
+		t.Errorf("Execute() expected context.Canceled, got: %v", err)
 	}
 }
 

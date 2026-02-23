@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 // mockMessagePublisher captures published messages for testing.
@@ -191,7 +189,7 @@ func TestInputModule_PublishMessages(t *testing.T) {
 		"target_topic": "test-topic",
 		"input": map[string]any{
 			"generate": map[string]any{
-				"mapping":  `root = {"id": count("c"), "msg": "hello"}`,
+				"mapping":  `root = {"id": count("input_id"), "msg": "hello"}`,
 				"count":    3,
 				"interval": "10ms",
 			},
@@ -209,14 +207,21 @@ func TestInputModule_PublishMessages(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Wait for messages to be published
-	time.Sleep(500 * time.Millisecond)
+	// Poll until 3 messages are published or deadline is reached.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(pub.GetMessages()) >= 3 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Stop may report "stream has not been run yet" if generate already finished
-	_ = m.Stop(stopCtx)
+	if err := m.Stop(stopCtx); err != nil {
+		t.Errorf("Stop() error = %v", err)
+	}
 
 	messages := pub.GetMessages()
 	if len(messages) != 3 {
