@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 	"github.com/warpstreamlabs/bento/v4/public/service"
@@ -100,7 +101,7 @@ func (m *outputModule) Start(ctx context.Context) error {
 	go func() {
 		defer close(m.done)
 		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			_ = err
+			slog.Error("bento output stream runtime error", "name", m.name, "error", err)
 		}
 	}()
 

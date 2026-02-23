@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/warpstreamlabs/bento/v4/public/service"
 )
@@ -56,8 +57,7 @@ func (m *streamModule) Start(ctx context.Context) error {
 	go func() {
 		defer close(m.done)
 		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			// Log error but don't panic — stream may have been stopped intentionally.
-			_ = err
+			slog.Error("bento stream runtime error", "name", m.name, "error", err)
 		}
 	}()
 

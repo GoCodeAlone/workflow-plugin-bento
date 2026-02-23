@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
@@ -136,7 +137,7 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 
 	go func() {
 		if err := stream.Run(ctx); err != nil && ctx.Err() == nil {
-			_ = err
+			slog.Error("bento broker stream runtime error", "name", m.name, "topic", topic, "error", err)
 		}
 	}()
 
