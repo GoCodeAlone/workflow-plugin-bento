@@ -127,8 +127,10 @@ func (m *outputModule) Start(ctx context.Context) error {
 		log.LogMessageProcessed(sourceTopic)
 		return nil
 	}); err != nil {
-		// Cancel the context since the stream goroutine was never launched.
+		// Cancel the context and stop the built stream to avoid a resource leak,
+		// since the stream goroutine was never launched.
 		cancel()
+		_ = stream.Stop(ctx)
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
 
