@@ -259,8 +259,17 @@ func TestBentoTrigger_MultipleSubscriptions(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Wait for all messages
-	time.Sleep(200 * time.Millisecond)
+	// Wait until both subscriptions have invoked the callback, or time out.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if len(cb.GetCalls()) >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for 2 callback invocations, got %d", len(cb.GetCalls()))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -385,8 +394,8 @@ func TestBentoTrigger_CallbackError(t *testing.T) {
 	cbMu.Lock()
 	count := cbCount
 	cbMu.Unlock()
-	if count == 0 {
-		t.Error("expected callback to be invoked at least once")
+	if count < 2 {
+		t.Errorf("expected callback to be invoked at least twice (1 error + 1 success), got %d", count)
 	}
 }
 

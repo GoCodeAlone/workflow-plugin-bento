@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 )
@@ -254,9 +255,8 @@ func TestProcessorStep_ExecuteWithContextCancel(t *testing.T) {
 
 	if err == nil {
 		t.Error("Execute() expected error with cancelled context")
-	}
-	if err != context.Canceled {
-		t.Logf("got error: %v", err)
+	} else if !errors.Is(err, context.Canceled) {
+		t.Errorf("Execute() expected context.Canceled, got: %v", err)
 	}
 }
 
