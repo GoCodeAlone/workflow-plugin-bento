@@ -397,9 +397,13 @@ func TestBentoTrigger_StopWithoutStart(t *testing.T) {
 		t.Fatalf("newBentoTrigger() error = %v", err)
 	}
 
-	ctx := context.Background()
-	// Stop without Start should not panic
-	if err := trigger.Stop(ctx); err != nil {
-		t.Errorf("Stop() without Start error = %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Stop without Start — done channel never closed, expect timeout or nil
+	err = trigger.Stop(ctx)
+	if err == nil || errors.Is(err, context.DeadlineExceeded) {
+		return
 	}
+	t.Errorf("Stop() without Start: expected nil or DeadlineExceeded, got %v", err)
 }

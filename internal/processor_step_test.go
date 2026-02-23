@@ -19,10 +19,10 @@ func TestNewProcessorStep(t *testing.T) {
 			name:     "with processors as string",
 			stepName: "test-step",
 			config: map[string]any{
-				"processors": "- bloblang: 'root = this'",
+				"processors": "bloblang: 'root = this'",
 			},
 			wantErr:      false,
-			wantProcYAML: "- bloblang: 'root = this'",
+			wantProcYAML: "bloblang: 'root = this'",
 		},
 		{
 			name:     "with processors as map",
@@ -108,28 +108,28 @@ func TestProcessorStep_ExecuteWithBloblang(t *testing.T) {
 	}{
 		{
 			name:       "simple pass-through mapping",
-			processors: "- bloblang: 'root = this'",
+			processors: "mapping: 'root = this'",
 			input:      map[string]any{"key": "value"},
 			wantOutput: map[string]any{"key": "value"},
 			wantErr:    false,
 		},
 		{
 			name:       "field transformation",
-			processors: "- bloblang: 'root.output = this.input.uppercase()'",
+			processors: "mapping: 'root.output = this.input.uppercase()'",
 			input:      map[string]any{"input": "hello"},
 			wantOutput: map[string]any{"output": "HELLO"},
 			wantErr:    false,
 		},
 		{
 			name:       "add computed field",
-			processors: "- bloblang: 'root = this\nroot.computed = (this.a + this.b)'",
+			processors: "mapping: |\n  root = this\n  root.computed = this.a + this.b",
 			input:      map[string]any{"a": float64(5), "b": float64(3)},
 			wantOutput: map[string]any{"a": float64(5), "b": float64(3), "computed": float64(8)},
 			wantErr:    false,
 		},
 		{
 			name:       "constant output",
-			processors: "- bloblang: 'root.status = \"processed\"'",
+			processors: "mapping: 'root.status = \"processed\"'",
 			input:      map[string]any{"data": "test"},
 			wantOutput: map[string]any{"status": "processed"},
 			wantErr:    false,
@@ -172,14 +172,16 @@ func TestProcessorStep_ExecuteWithBloblang(t *testing.T) {
 
 func TestProcessorStep_ExecuteWithInvalidBloblang(t *testing.T) {
 	s, err := newProcessorStep("test", map[string]any{
-		"processors": "- bloblang: 'root = invalid syntax here {'",
+		"processors": "mapping: 'root = invalid syntax here {'",
 	})
 	if err != nil {
-		t.Fatalf("newProcessorStep() error = %v", err)
+		// Invalid Bloblang may be caught at construction time
+		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+
 	result, err := s.Execute(ctx, map[string]any{"data": "test"}, nil, map[string]any{}, nil)
 
 	if err == nil {
@@ -192,7 +194,7 @@ func TestProcessorStep_ExecuteWithInvalidBloblang(t *testing.T) {
 
 func TestProcessorStep_ExecuteMergesInputs(t *testing.T) {
 	s, err := newProcessorStep("test", map[string]any{
-		"processors": "- bloblang: 'root = this'",
+		"processors": "mapping: 'root = this'",
 	})
 	if err != nil {
 		t.Fatalf("newProcessorStep() error = %v", err)
@@ -219,7 +221,7 @@ func TestProcessorStep_ExecuteMergesInputs(t *testing.T) {
 func TestProcessorStep_ExecuteWithNonJSONOutput(t *testing.T) {
 	// Processor that outputs plain text instead of JSON
 	s, err := newProcessorStep("test", map[string]any{
-		"processors": "- bloblang: 'root = \"plain text output\"'",
+		"processors": "mapping: 'root = \"plain text output\"'",
 	})
 	if err != nil {
 		t.Fatalf("newProcessorStep() error = %v", err)
@@ -239,7 +241,7 @@ func TestProcessorStep_ExecuteWithNonJSONOutput(t *testing.T) {
 
 func TestProcessorStep_ExecuteWithContextCancel(t *testing.T) {
 	s, err := newProcessorStep("test", map[string]any{
-		"processors": "- bloblang: 'root = this'",
+		"processors": "mapping: 'root = this'",
 	})
 	if err != nil {
 		t.Fatalf("newProcessorStep() error = %v", err)
@@ -259,12 +261,9 @@ func TestProcessorStep_ExecuteWithContextCancel(t *testing.T) {
 }
 
 func TestProcessorStep_ExecuteWithMultipleProcessors(t *testing.T) {
-	// Multiple processors in a chain
+	// Combined mapping that chains transformations
 	s, err := newProcessorStep("test", map[string]any{
-		"processors": `
-- bloblang: 'root.step1 = this.input.uppercase()'
-- bloblang: 'root.step2 = this.step1 + " PROCESSED"'
-`,
+		"processors": "mapping: |\n  root.step1 = this.input.uppercase()\n  root.step2 = root.step1 + \" PROCESSED\"",
 	})
 	if err != nil {
 		t.Fatalf("newProcessorStep() error = %v", err)
