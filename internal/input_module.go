@@ -140,6 +140,7 @@ func (m *inputModule) Start(ctx context.Context) error {
 	m.cancel = cancel
 
 	m.health.SetRunning(true)
+	m.metrics.MarkStarted()
 	m.log.LogStreamStart("bento.input",
 		slog.String("target_topic", m.targetTopic),
 		slog.String("target_broker", m.targetBroker),
@@ -147,9 +148,12 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 	go func() {
 		defer close(m.done)
-		if runErr := stream.Run(runCtx); runErr != nil && runCtx.Err() == nil {
-			m.metrics.RecordError()
-			m.log.LogStreamError(runErr)
+		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
+			m.health.SetRunning(false)
+			if runErr != nil {
+				m.metrics.RecordError()
+				m.log.LogStreamError(runErr)
+			}
 		}
 	}()
 
@@ -178,6 +182,7 @@ func (m *inputModule) Stop(ctx context.Context) error {
 	}
 
 	m.health.SetRunning(false)
+	m.metrics.MarkStopped()
 	snap := m.metrics.Snapshot()
 	m.log.LogStreamStop(snap.MessagesOut,
 		slog.String("target_topic", m.targetTopic),
