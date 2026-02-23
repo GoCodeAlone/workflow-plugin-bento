@@ -20,6 +20,9 @@ type inputModule struct {
 	stream       *service.Stream
 	cancel       context.CancelFunc
 	done         chan struct{}
+	log          *bentoLogger
+	metrics      *StreamMetrics
+	health       *healthTracker
 }
 
 // SetMessagePublisher satisfies the MessageAwareModule interface.
@@ -32,10 +35,14 @@ func (m *inputModule) SetMessagePublisher(pub sdk.MessagePublisher) {
 func (m *inputModule) SetMessageSubscriber(_ sdk.MessageSubscriber) {}
 
 func newInputModule(name string, config map[string]any) (*inputModule, error) {
+	metrics := newStreamMetrics()
 	return &inputModule{
-		name:   name,
-		config: config,
-		done:   make(chan struct{}),
+		name:    name,
+		config:  config,
+		done:    make(chan struct{}),
+		log:     newLogger("bento.input", name),
+		metrics: metrics,
+		health:  newHealthTracker(metrics),
 	}, nil
 }
 
@@ -85,12 +92,14 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 	topic := m.targetTopic
 	pub := m.publisher
-	moduleName := m.name
+	metrics := m.metrics
+	log := m.log
 
 	if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 		payload, msgErr := msg.AsBytes()
 		if msgErr != nil {
-			slog.Error("failed to read message bytes", "error", msgErr, "module", moduleName)
+			metrics.RecordError()
+			log.LogStreamError(msgErr, slog.String("phase", "read_bytes"))
 			return fmt.Errorf("read message bytes: %w", msgErr)
 		}
 
@@ -109,9 +118,14 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 		_, pubErr := pub.Publish(topic, payload, meta)
 		if pubErr != nil {
-			slog.Error("failed to publish message", "error", pubErr, "module", moduleName, "topic", topic)
+			metrics.RecordError()
+			log.LogStreamError(pubErr, slog.String("phase", "publish"))
+			return pubErr
 		}
-		return pubErr
+
+		metrics.RecordMessageOut()
+		log.LogMessageProcessed(topic)
+		return nil
 	}); err != nil {
 		return fmt.Errorf("bento.input %q: add consumer func: %w", m.name, err)
 	}
@@ -125,12 +139,17 @@ func (m *inputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	slog.Info("bento input running", "module", m.name)
+	m.health.SetRunning(true)
+	m.log.LogStreamStart("bento.input",
+		slog.String("target_topic", m.targetTopic),
+		slog.String("target_broker", m.targetBroker),
+	)
 
 	go func() {
 		defer close(m.done)
-		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento input stream failed", "error", err, "module", moduleName)
+		if runErr := stream.Run(runCtx); runErr != nil && runCtx.Err() == nil {
+			m.metrics.RecordError()
+			m.log.LogStreamError(runErr)
 		}
 	}()
 
@@ -143,7 +162,8 @@ func (m *inputModule) Stop(ctx context.Context) error {
 
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
-			slog.Error("error stopping bento input", "error", err, "module", m.name)
+			m.metrics.RecordError()
+			m.log.LogStreamError(err, slog.String("phase", "stop"))
 			return fmt.Errorf("bento.input %q: stop: %w", m.name, err)
 		}
 	}
@@ -156,5 +176,19 @@ func (m *inputModule) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+
+	m.health.SetRunning(false)
+	snap := m.metrics.Snapshot()
+	m.log.LogStreamStop(snap.MessagesOut,
+		slog.String("target_topic", m.targetTopic),
+		slog.Duration("uptime", snap.Uptime),
+		slog.Int64("errors", snap.Errors),
+	)
+
 	return nil
+}
+
+// Health returns the current health report for this input module.
+func (m *inputModule) Health() HealthReport {
+	return m.health.Report()
 }

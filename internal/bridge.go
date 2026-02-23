@@ -48,29 +48,3 @@ func messageToMap(msg *service.Message) (map[string]any, error) {
 	return result, nil
 }
 
-// mapToMessage converts a map to a Bento service.Message.
-// If the map has a "body" key, its JSON representation becomes the message bytes.
-// Additional metadata keys are attached.
-func mapToMessage(data map[string]any) *service.Message {
-	var body []byte
-
-	if b, ok := data["body"]; ok {
-		if s, ok2 := b.(string); ok2 {
-			body = []byte(s)
-		} else {
-			body, _ = json.Marshal(b)
-		}
-	} else {
-		body, _ = json.Marshal(data)
-	}
-
-	msg := service.NewMessage(body)
-
-	if meta, ok := data["metadata"].(map[string]any); ok {
-		for k, v := range meta {
-			msg.MetaSetMut(k, v)
-		}
-	}
-
-	return msg
-}

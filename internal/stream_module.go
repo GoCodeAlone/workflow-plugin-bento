@@ -21,21 +21,25 @@ const (
 
 // streamModule wraps a complete Bento stream (input → pipeline → output) as a ModuleInstance.
 type streamModule struct {
-	name   string
-	config map[string]any
-	stream *service.Stream
-	cancel context.CancelFunc
-	done   chan struct{}
-	status streamStatus
-	mu     sync.RWMutex
+	name    string
+	config  map[string]any
+	stream  *service.Stream
+	cancel  context.CancelFunc
+	done    chan struct{}
+	log     *bentoLogger
+	metrics *StreamMetrics
+	health  *healthTracker
 }
 
 func newStreamModule(name string, config map[string]any) (*streamModule, error) {
+	metrics := newStreamMetrics()
 	return &streamModule{
-		name:   name,
-		config: config,
-		done:   make(chan struct{}),
-		status: streamStopped,
+		name:    name,
+		config:  config,
+		done:    make(chan struct{}),
+		log:     newLogger("bento.stream", name),
+		metrics: metrics,
+		health:  newHealthTracker(metrics),
 	}, nil
 }
 
@@ -87,16 +91,17 @@ func (m *streamModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	m.setStatus(streamRunning)
-	slog.Info("bento stream running", "module", m.name)
+	m.health.SetRunning(true)
+
+	m.log.LogStreamStart("bento",
+		slog.Int("config_keys", len(m.config)),
+	)
 
 	go func() {
 		defer close(m.done)
-		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			m.setStatus(streamErrored)
-			slog.Error("bento stream failed", "error", err, "module", m.name)
-		} else {
-			m.setStatus(streamStopped)
+		if runErr := stream.Run(runCtx); runErr != nil && runCtx.Err() == nil {
+			m.metrics.RecordError()
+			m.log.LogStreamError(runErr)
 		}
 	}()
 
@@ -109,8 +114,8 @@ func (m *streamModule) Stop(ctx context.Context) error {
 
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
-			m.setStatus(streamErrored)
-			slog.Error("error stopping bento stream", "error", err, "module", m.name)
+			m.metrics.RecordError()
+			m.log.LogStreamError(err, slog.String("phase", "stop"))
 			return fmt.Errorf("bento.stream %q: stop: %w", m.name, err)
 		}
 	}
@@ -124,5 +129,18 @@ func (m *streamModule) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+
+	m.health.SetRunning(false)
+	snap := m.metrics.Snapshot()
+	m.log.LogStreamStop(snap.MessagesIn,
+		slog.Duration("uptime", snap.Uptime),
+		slog.Int64("errors", snap.Errors),
+	)
+
 	return nil
+}
+
+// Health returns the current health report for this stream.
+func (m *streamModule) Health() HealthReport {
+	return m.health.Report()
 }

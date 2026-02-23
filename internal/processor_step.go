@@ -15,10 +15,15 @@ type processorStep struct {
 	name       string
 	config     map[string]any
 	processors string // YAML for the processors section
+	log        *bentoLogger
 }
 
 func newProcessorStep(name string, config map[string]any) (*processorStep, error) {
-	s := &processorStep{name: name, config: config}
+	s := &processorStep{
+		name:   name,
+		config: config,
+		log:    newLogger("step.bento", name),
+	}
 
 	// Extract the "processors" key if present; it can be a YAML string or a map.
 	switch v := config["processors"].(type) {
@@ -43,7 +48,7 @@ func newProcessorStep(name string, config map[string]any) (*processorStep, error
 // Execute runs the input data through the configured Bento processors and
 // returns the transformed output.
 func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any, _ map[string]map[string]any, current map[string]any, _ map[string]any) (*sdk.StepResult, error) {
-	slog.Debug("executing bento step", "step", s.name)
+	s.log.LogProcessingStart(s.name)
 
 	// Merge current + triggerData as the step input.
 	input := make(map[string]any, len(triggerData)+len(current))
@@ -56,13 +61,13 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	// If no processors configured, pass data through unchanged.
 	if s.processors == "" {
-		slog.Debug("bento step passthrough (no processors)", "step", s.name)
+		s.log.LogProcessingComplete(s.name)
 		return &sdk.StepResult{Output: input}, nil
 	}
 
 	inputBytes, err := json.Marshal(input)
 	if err != nil {
-		slog.Error("failed to marshal step input", "error", err, "step", s.name)
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: marshal input: %w", s.name, err)
 	}
 
@@ -72,10 +77,12 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	producerFn, err := builder.AddProducerFunc()
 	if err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: add producer: %w", s.name, err)
 	}
 
 	if err := builder.AddProcessorYAML(s.processors); err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: add processor yaml: %w", s.name, err)
 	}
 
@@ -100,11 +107,13 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 		resultCh <- out
 		return nil
 	}); err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: add consumer: %w", s.name, err)
 	}
 
 	stream, err := builder.Build()
 	if err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: build stream: %w", s.name, err)
 	}
 
@@ -121,7 +130,7 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	inputMsg := service.NewMessage(inputBytes)
 	if err := producerFn(ctx, inputMsg); err != nil {
 		streamCancel()
-		slog.Error("failed to send message to bento processor", "error", err, "step", s.name)
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: send input message: %w", s.name, err)
 	}
 
@@ -132,9 +141,11 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 		slog.Debug("bento step completed", "step", s.name)
 	case err := <-errCh:
 		streamCancel()
+		s.log.LogProcessingError(s.name, err)
 		return nil, err
 	case <-ctx.Done():
 		streamCancel()
+		s.log.LogProcessingError(s.name, ctx.Err())
 		return nil, ctx.Err()
 	}
 
@@ -145,5 +156,6 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	streamCancel()
 	<-streamDone
 
+	s.log.LogProcessingComplete(s.name)
 	return &sdk.StepResult{Output: output}, nil
 }
