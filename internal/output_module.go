@@ -21,6 +21,9 @@ type outputModule struct {
 	producerFn   service.MessageHandlerFunc
 	cancel       context.CancelFunc
 	done         chan struct{}
+	log          *bentoLogger
+	metrics      *StreamMetrics
+	health       *healthTracker
 }
 
 // SetMessagePublisher satisfies the MessageAwareModule interface.
@@ -33,10 +36,14 @@ func (m *outputModule) SetMessageSubscriber(sub sdk.MessageSubscriber) {
 }
 
 func newOutputModule(name string, config map[string]any) (*outputModule, error) {
+	metrics := newStreamMetrics()
 	return &outputModule{
-		name:   name,
-		config: config,
-		done:   make(chan struct{}),
+		name:    name,
+		config:  config,
+		done:    make(chan struct{}),
+		log:     newLogger("bento.output", name),
+		metrics: metrics,
+		health:  newHealthTracker(metrics),
 	}, nil
 }
 
@@ -98,22 +105,40 @@ func (m *outputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
+	m.health.SetRunning(true)
+	m.log.LogStreamStart("bento.output",
+		slog.String("source_topic", m.sourceTopic),
+		slog.String("source_broker", m.sourceBroker),
+	)
+
 	go func() {
 		defer close(m.done)
-		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento output stream runtime error", "name", m.name, "error", err)
+		if runErr := stream.Run(runCtx); runErr != nil && runCtx.Err() == nil {
+			m.metrics.RecordError()
+			m.log.LogStreamError(runErr)
 		}
 	}()
 
 	// Subscribe to the host EventBus topic. When messages arrive, forward them
 	// to the Bento producer.
 	producerFnRef := m.producerFn
+	metrics := m.metrics
+	log := m.log
+	sourceTopic := m.sourceTopic
+
 	if err := m.subscriber.Subscribe(m.sourceTopic, func(payload []byte, metadata map[string]string) error {
 		msg := service.NewMessage(payload)
 		for k, v := range metadata {
 			msg.MetaSet(k, v)
 		}
-		return producerFnRef(runCtx, msg)
+		if sendErr := producerFnRef(runCtx, msg); sendErr != nil {
+			metrics.RecordError()
+			log.LogStreamError(sendErr, slog.String("phase", "forward"))
+			return sendErr
+		}
+		metrics.RecordMessageIn()
+		log.LogMessageProcessed(sourceTopic)
+		return nil
 	}); err != nil {
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
@@ -128,6 +153,8 @@ func (m *outputModule) Stop(ctx context.Context) error {
 	}
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
+			m.metrics.RecordError()
+			m.log.LogStreamError(err, slog.String("phase", "stop"))
 			return fmt.Errorf("bento.output %q: stop: %w", m.name, err)
 		}
 	}
@@ -139,5 +166,19 @@ func (m *outputModule) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+
+	m.health.SetRunning(false)
+	snap := m.metrics.Snapshot()
+	m.log.LogStreamStop(snap.MessagesIn,
+		slog.String("source_topic", m.sourceTopic),
+		slog.Duration("uptime", snap.Uptime),
+		slog.Int64("errors", snap.Errors),
+	)
+
 	return nil
+}
+
+// Health returns the current health report for this output module.
+func (m *outputModule) Health() HealthReport {
+	return m.health.Report()
 }
