@@ -92,6 +92,8 @@ func (t *bentoTrigger) parseSubscriptions() error {
 
 // Start creates one Bento input stream per subscription and runs them.
 func (t *bentoTrigger) Start(ctx context.Context) error {
+	slog.Info("starting bento trigger", "subscriptions", len(t.subscriptions))
+
 	runCtx, cancel := context.WithCancel(context.Background())
 
 	t.mu.Lock()
@@ -100,8 +102,9 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 
-	for _, sub := range t.subscriptions {
+	for i, sub := range t.subscriptions {
 		sub := sub // capture loop variable
+		idx := i
 
 		inputYAML, err := configToYAML(sub.inputConfig)
 		if err != nil {
@@ -123,12 +126,20 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 		if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 			data, convErr := messageToMap(msg)
 			if convErr != nil {
+				slog.Error("failed to convert message", "error", convErr, "workflow", workflow)
 				return convErr
 			}
 			if workflow != "" {
 				data["workflow"] = workflow
 			}
-			return cb(action, data)
+
+			slog.Debug("trigger firing workflow", "workflow", workflow, "action", action)
+
+			callbackErr := cb(action, data)
+			if callbackErr != nil {
+				slog.Error("workflow callback failed", "error", callbackErr, "workflow", workflow, "action", action)
+			}
+			return callbackErr
 		}); err != nil {
 			cancel()
 			return fmt.Errorf("bento trigger: add consumer for workflow %q: %w", sub.workflow, err)
@@ -143,6 +154,8 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 		t.mu.Lock()
 		t.streams = append(t.streams, stream)
 		t.mu.Unlock()
+
+		slog.Info("bento trigger subscription started", "index", idx, "workflow", workflow, "action", action)
 
 		wg.Add(1)
 		go func() {
@@ -160,6 +173,7 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 	go func() {
 		wg.Wait()
 		close(t.done)
+		slog.Info("all bento trigger streams exited")
 	}()
 
 	_ = ctx
@@ -168,6 +182,8 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 
 // Stop halts all running streams and waits for goroutines to finish.
 func (t *bentoTrigger) Stop(ctx context.Context) error {
+	slog.Info("stopping bento trigger")
+
 	t.mu.Lock()
 	streams := make([]*service.Stream, len(t.streams))
 	copy(streams, t.streams)
@@ -175,9 +191,12 @@ func (t *bentoTrigger) Stop(ctx context.Context) error {
 	t.mu.Unlock()
 
 	var firstErr error
-	for _, stream := range streams {
-		if err := stream.Stop(ctx); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("bento trigger: stop stream: %w", err)
+	for i, stream := range streams {
+		if err := stream.Stop(ctx); err != nil {
+			slog.Error("failed to stop trigger stream", "error", err, "index", i)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("bento trigger: stop stream: %w", err)
+			}
 		}
 	}
 
@@ -187,6 +206,7 @@ func (t *bentoTrigger) Stop(ctx context.Context) error {
 
 	select {
 	case <-t.done:
+		slog.Info("bento trigger stopped")
 	case <-ctx.Done():
 		return ctx.Err()
 	}

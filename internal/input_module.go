@@ -65,6 +65,8 @@ func (m *inputModule) Start(ctx context.Context) error {
 		return fmt.Errorf("bento.input %q: no MessagePublisher set; ensure the host injects one", m.name)
 	}
 
+	slog.Info("starting bento input", "module", m.name, "target_topic", m.targetTopic)
+
 	// Build input YAML from the "input" key of the config.
 	inputCfg, ok := m.config["input"].(map[string]any)
 	if !ok {
@@ -83,10 +85,12 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 	topic := m.targetTopic
 	pub := m.publisher
+	moduleName := m.name
 
 	if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 		payload, msgErr := msg.AsBytes()
 		if msgErr != nil {
+			slog.Error("failed to read message bytes", "error", msgErr, "module", moduleName)
 			return fmt.Errorf("read message bytes: %w", msgErr)
 		}
 
@@ -101,7 +105,12 @@ func (m *inputModule) Start(ctx context.Context) error {
 			return nil
 		})
 
+		slog.Debug("forwarding message to host eventbus", "module", moduleName, "topic", topic, "size", len(payload))
+
 		_, pubErr := pub.Publish(topic, payload, meta)
+		if pubErr != nil {
+			slog.Error("failed to publish message", "error", pubErr, "module", moduleName, "topic", topic)
+		}
 		return pubErr
 	}); err != nil {
 		return fmt.Errorf("bento.input %q: add consumer func: %w", m.name, err)
@@ -116,10 +125,12 @@ func (m *inputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
+	slog.Info("bento input running", "module", m.name)
+
 	go func() {
 		defer close(m.done)
 		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento input stream runtime error", "name", m.name, "error", err)
+			slog.Error("bento input stream failed", "error", err, "module", moduleName)
 		}
 	}()
 
@@ -128,8 +139,11 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 // Stop halts the stream and waits for the goroutine to exit.
 func (m *inputModule) Stop(ctx context.Context) error {
+	slog.Info("stopping bento input", "module", m.name)
+
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
+			slog.Error("error stopping bento input", "error", err, "module", m.name)
 			return fmt.Errorf("bento.input %q: stop: %w", m.name, err)
 		}
 	}
@@ -138,6 +152,7 @@ func (m *inputModule) Stop(ctx context.Context) error {
 	}
 	select {
 	case <-m.done:
+		slog.Info("bento input stopped", "module", m.name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
