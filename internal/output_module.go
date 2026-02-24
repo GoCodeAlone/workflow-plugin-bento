@@ -21,6 +21,9 @@ type outputModule struct {
 	producerFn   service.MessageHandlerFunc
 	cancel       context.CancelFunc
 	done         chan struct{}
+	log          *bentoLogger
+	metrics      *StreamMetrics
+	health       *healthTracker
 }
 
 // SetMessagePublisher satisfies the MessageAwareModule interface.
@@ -33,10 +36,14 @@ func (m *outputModule) SetMessageSubscriber(sub sdk.MessageSubscriber) {
 }
 
 func newOutputModule(name string, config map[string]any) (*outputModule, error) {
+	metrics := newStreamMetrics()
 	return &outputModule{
-		name:   name,
-		config: config,
-		done:   make(chan struct{}),
+		name:    name,
+		config:  config,
+		done:    make(chan struct{}),
+		log:     newLogger("bento.output", name),
+		metrics: metrics,
+		health:  newHealthTracker(metrics),
 	}, nil
 }
 
@@ -59,6 +66,16 @@ func (m *outputModule) Init() error {
 	return nil
 }
 
+// outputTransportType extracts the top-level key from the output config map,
+// which represents the actual Bento output type (e.g. "kafka", "drop").
+// Falls back to "bento.output" if the type cannot be determined.
+func outputTransportType(outputCfg map[string]any) string {
+	for k := range outputCfg {
+		return k
+	}
+	return "bento.output"
+}
+
 // Start builds the Bento output stream, registers a producer func, and
 // subscribes to the host EventBus topic. Incoming messages are fed into Bento
 // for delivery.
@@ -67,7 +84,8 @@ func (m *outputModule) Start(ctx context.Context) error {
 		return fmt.Errorf("bento.output %q: no MessageSubscriber set; ensure the host injects one", m.name)
 	}
 
-	slog.Info("starting bento output", "module", m.name, "source_topic", m.sourceTopic)
+	// Reinitialize done so the module can be restarted after a previous Stop.
+	m.done = make(chan struct{})
 
 	// Build output YAML from the "output" key of the config.
 	outputCfg, ok := m.config["output"].(map[string]any)
@@ -99,56 +117,68 @@ func (m *outputModule) Start(ctx context.Context) error {
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
-	m.done = make(chan struct{})
 
-	moduleName := m.name
+	// Subscribe to the host EventBus topic before starting the stream. When
+	// messages arrive, forward them to the Bento producer. Subscribing first
+	// avoids leaking the stream goroutine if Subscribe returns an error.
 	producerFnRef := m.producerFn
+	metrics := m.metrics
+	log := m.log
+	sourceTopic := m.sourceTopic
 
-	go func() {
-		defer close(m.done)
-		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento output stream failed", "error", err, "module", moduleName)
-		}
-	}()
-
-	// Subscribe after launching the goroutine so that messages flow into the
-	// running stream. If Subscribe fails, cancel the context so the goroutine
-	// exits, wait for it to finish, then return the error.
 	if err := m.subscriber.Subscribe(m.sourceTopic, func(payload []byte, metadata map[string]string) error {
-		slog.Debug("sending message to bento output", "module", moduleName, "topic", m.sourceTopic, "size", len(payload))
-
 		msg := service.NewMessage(payload)
 		for k, v := range metadata {
 			msg.MetaSet(k, v)
 		}
-		sendErr := producerFnRef(runCtx, msg)
-		if sendErr != nil {
-			slog.Error("failed to send message to bento output", "error", sendErr, "module", moduleName)
+		if sendErr := producerFnRef(runCtx, msg); sendErr != nil {
+			metrics.RecordError()
+			log.LogStreamError(sendErr, slog.String("phase", "forward"))
+			return sendErr
 		}
-		return sendErr
+		metrics.RecordMessageIn()
+		log.LogMessageProcessed(sourceTopic)
+		return nil
 	}); err != nil {
+		// Cancel the context and stop the built stream to avoid a resource leak,
+		// since the stream goroutine was never launched.
 		cancel()
-		<-m.done
+		_ = stream.Stop(ctx)
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
 
-	slog.Info("bento output running", "module", m.name)
+	m.metrics.MarkStarted()
+	// Extract the actual output transport type (e.g. "kafka", "drop") for
+	// more informative log output instead of the generic module type string.
+	m.log.LogStreamStart(outputTransportType(outputCfg),
+		slog.String("source_topic", m.sourceTopic),
+		slog.String("source_broker", m.sourceBroker),
+	)
+
+	go func() {
+		defer close(m.done)
+		m.health.SetRunning(true)
+		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
+			m.health.SetRunning(false)
+			if runErr != nil {
+				m.metrics.RecordError()
+				m.log.LogStreamError(runErr)
+			}
+		}
+	}()
 
 	return nil
 }
 
 // Stop unsubscribes, stops the stream, and waits for the goroutine to exit.
 func (m *outputModule) Stop(ctx context.Context) error {
-	slog.Info("stopping bento output", "module", m.name)
-
 	if m.subscriber != nil {
-		if err := m.subscriber.Unsubscribe(m.sourceTopic); err != nil {
-			slog.Error("error unsubscribing from source topic", "error", err, "module", m.name, "topic", m.sourceTopic)
-		}
+		_ = m.subscriber.Unsubscribe(m.sourceTopic)
 	}
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
-			slog.Error("error stopping bento output", "error", err, "module", m.name)
+			m.metrics.RecordError()
+			m.log.LogStreamError(err, slog.String("phase", "stop"))
 			return fmt.Errorf("bento.output %q: stop: %w", m.name, err)
 		}
 	}
@@ -157,9 +187,23 @@ func (m *outputModule) Stop(ctx context.Context) error {
 	}
 	select {
 	case <-m.done:
-		slog.Info("bento output stopped", "module", m.name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+
+	m.health.SetRunning(false)
+	m.metrics.MarkStopped()
+	snap := m.metrics.Snapshot()
+	m.log.LogStreamStop(snap.MessagesIn,
+		slog.String("source_topic", m.sourceTopic),
+		slog.Duration("uptime", snap.Uptime),
+		slog.Int64("errors", snap.Errors),
+	)
+
 	return nil
+}
+
+// Health returns the current health report for this output module.
+func (m *outputModule) Health() HealthReport {
+	return m.health.Report()
 }

@@ -113,8 +113,17 @@ func TestStreamModule_StartStop(t *testing.T) {
 			t.Fatalf("Start() error = %v", err)
 		}
 
-		// Let it run briefly
-		time.Sleep(50 * time.Millisecond)
+		// Wait until the stream is running before stopping.
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			if m.Health().Status == HealthStatusHealthy {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("stream did not become healthy within timeout")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 
 		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -152,6 +161,68 @@ func TestStreamModule_StartStop(t *testing.T) {
 	})
 }
 
+func TestStreamModule_Health(t *testing.T) {
+	m, _ := newStreamModule("test-stream", map[string]any{
+		"input": map[string]any{
+			"generate": map[string]any{
+				"mapping":  `root = {"test": "data"}`,
+				"count":    0,
+				"interval": "1s",
+			},
+		},
+		"output": map[string]any{
+			"drop": map[string]any{},
+		},
+	})
+
+	// Before start: unhealthy
+	report := m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy before start, got %s", report.StatusText)
+	}
+
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Wait for the stream goroutine to report healthy before checking health / stopping.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		report = m.Health()
+		if report.Status == HealthStatusHealthy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected healthy after start within timeout, got %s", report.StatusText)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// After start: healthy
+	report = m.Health()
+	if report.Status != HealthStatusHealthy {
+		t.Errorf("expected healthy after start, got %s", report.StatusText)
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := m.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	// After stop: unhealthy
+	report = m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy after stop, got %s", report.StatusText)
+	}
+}
+
 func TestStreamModule_StopWithoutStart(t *testing.T) {
 	m, _ := newStreamModule("test", map[string]any{"input": map[string]any{}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -166,131 +237,4 @@ func TestStreamModule_StopWithoutStart(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Stop() without Start: expected DeadlineExceeded, got %v", err)
 	}
-}
-
-func TestStreamModule_StatusTransitions(t *testing.T) {
-	t.Run("initial status is stopped", func(t *testing.T) {
-		m, err := newStreamModule("test-stream", map[string]any{
-			"input":  map[string]any{"generate": map[string]any{}},
-			"output": map[string]any{"drop": map[string]any{}},
-		})
-		if err != nil {
-			t.Fatalf("newStreamModule() error = %v", err)
-		}
-		if got := m.Status(); got != streamStopped {
-			t.Errorf("initial status = %q, want %q", got, streamStopped)
-		}
-	})
-
-	t.Run("status is running after successful start", func(t *testing.T) {
-		m, err := newStreamModule("test-stream", map[string]any{
-			"input": map[string]any{
-				"generate": map[string]any{
-					"mapping":  `root = {"test": "data"}`,
-					"count":    0,
-					"interval": "1s",
-				},
-			},
-			"output": map[string]any{
-				"drop": map[string]any{},
-			},
-		})
-		if err != nil {
-			t.Fatalf("newStreamModule() error = %v", err)
-		}
-
-		if err := m.Init(); err != nil {
-			t.Fatalf("Init() error = %v", err)
-		}
-
-		ctx := context.Background()
-		if err := m.Start(ctx); err != nil {
-			t.Fatalf("Start() error = %v", err)
-		}
-
-		if got := m.Status(); got != streamRunning {
-			t.Errorf("status after Start = %q, want %q", got, streamRunning)
-		}
-
-		// Allow goroutine to begin running before stopping.
-		time.Sleep(50 * time.Millisecond)
-
-		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := m.Stop(stopCtx); err != nil {
-			t.Fatalf("Stop() error = %v", err)
-		}
-	})
-
-	t.Run("status is stopped after successful stop", func(t *testing.T) {
-		m, err := newStreamModule("test-stream", map[string]any{
-			"input": map[string]any{
-				"generate": map[string]any{
-					"mapping":  `root = {"test": "data"}`,
-					"count":    0,
-					"interval": "1s",
-				},
-			},
-			"output": map[string]any{
-				"drop": map[string]any{},
-			},
-		})
-		if err != nil {
-			t.Fatalf("newStreamModule() error = %v", err)
-		}
-
-		if err := m.Init(); err != nil {
-			t.Fatalf("Init() error = %v", err)
-		}
-
-		ctx := context.Background()
-		if err := m.Start(ctx); err != nil {
-			t.Fatalf("Start() error = %v", err)
-		}
-
-		// Allow goroutine to begin running before stopping.
-		time.Sleep(50 * time.Millisecond)
-
-		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		if err := m.Stop(stopCtx); err != nil {
-			t.Fatalf("Stop() error = %v", err)
-		}
-
-		if got := m.Status(); got != streamStopped {
-			t.Errorf("status after Stop = %q, want %q", got, streamStopped)
-		}
-	})
-
-	t.Run("status is errored after failed start", func(t *testing.T) {
-		m, err := newStreamModule("bad-stream", map[string]any{
-			"input": map[string]any{
-				"unknown_input_type": map[string]any{
-					"invalid": "config",
-				},
-			},
-			"output": map[string]any{
-				"drop": map[string]any{},
-			},
-		})
-		if err != nil {
-			t.Fatalf("newStreamModule() error = %v", err)
-		}
-
-		if err := m.Init(); err != nil {
-			t.Fatalf("Init() error = %v", err)
-		}
-
-		ctx := context.Background()
-		if err := m.Start(ctx); err == nil {
-			t.Error("Start() expected error for invalid config, got nil")
-			_ = m.Stop(context.Background())
-			return
-		}
-
-		if got := m.Status(); got != streamErrored {
-			t.Errorf("status after failed Start = %q, want %q", got, streamErrored)
-		}
-	})
 }

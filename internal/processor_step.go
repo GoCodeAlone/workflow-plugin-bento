@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	"sync"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 	"github.com/warpstreamlabs/bento/v4/public/service"
@@ -15,10 +15,15 @@ type processorStep struct {
 	name       string
 	config     map[string]any
 	processors string // YAML for the processors section
+	log        *bentoLogger
 }
 
 func newProcessorStep(name string, config map[string]any) (*processorStep, error) {
-	s := &processorStep{name: name, config: config}
+	s := &processorStep{
+		name:   name,
+		config: config,
+		log:    newLogger("step.bento", name),
+	}
 
 	// Extract the "processors" key if present; it can be a YAML string or a map.
 	switch v := config["processors"].(type) {
@@ -43,7 +48,7 @@ func newProcessorStep(name string, config map[string]any) (*processorStep, error
 // Execute runs the input data through the configured Bento processors and
 // returns the transformed output.
 func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any, _ map[string]map[string]any, current map[string]any, _ map[string]any) (*sdk.StepResult, error) {
-	slog.Debug("executing bento step", "step", s.name)
+	s.log.LogProcessingStart(s.name)
 
 	// Merge current + triggerData as the step input.
 	input := make(map[string]any, len(triggerData)+len(current))
@@ -56,13 +61,13 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	// If no processors configured, pass data through unchanged.
 	if s.processors == "" {
-		slog.Debug("bento step passthrough (no processors)", "step", s.name)
+		s.log.LogProcessingComplete(s.name)
 		return &sdk.StepResult{Output: input}, nil
 	}
 
 	inputBytes, err := json.Marshal(input)
 	if err != nil {
-		slog.Error("failed to marshal step input", "error", err, "step", s.name)
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: marshal input: %w", s.name, err)
 	}
 
@@ -72,24 +77,27 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	producerFn, err := builder.AddProducerFunc()
 	if err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: add producer: %w", s.name, err)
 	}
 
 	if err := builder.AddProcessorYAML(s.processors); err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: add processor yaml: %w", s.name, err)
 	}
 
-	// Collect results via consumer.
+	// Collect results via consumer. sync.Once ensures only the first message
+	// (or error) is captured; if the processor emits multiple messages the
+	// remaining ones are acknowledged and discarded rather than blocking the
+	// fixed-size channel and deadlocking the consumer goroutine.
 	resultCh := make(chan map[string]any, 1)
 	errCh := make(chan error, 1)
-
-	stepName := s.name
+	var once sync.Once
 
 	if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 		raw, err := msg.AsBytes()
 		if err != nil {
-			slog.Error("failed to read processed message", "error", err, "step", stepName)
-			errCh <- fmt.Errorf("read processed message: %w", err)
+			once.Do(func() { errCh <- fmt.Errorf("read processed message: %w", err) })
 			return err
 		}
 		var out map[string]any
@@ -97,31 +105,43 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 			// Not JSON — store raw string under "output".
 			out = map[string]any{"output": string(raw)}
 		}
-		resultCh <- out
+		once.Do(func() { resultCh <- out })
 		return nil
 	}); err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: add consumer: %w", s.name, err)
 	}
 
 	stream, err := builder.Build()
 	if err != nil {
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: build stream: %w", s.name, err)
 	}
 
 	// Run stream in background; stop it once we've received the result.
 	streamCtx, streamCancel := context.WithCancel(ctx)
-	defer streamCancel()
 
 	streamDone := make(chan error, 1)
 	go func() {
 		streamDone <- stream.Run(streamCtx)
 	}()
 
+	// Ensure stream is stopped and drained on all exit paths from this point.
+	// Use a select on ctx.Done() when waiting for the stream goroutine so that
+	// a cancelled parent context does not cause an unconditional deadlock here.
+	defer func() {
+		streamCancel()
+		_ = stream.Stop(context.Background())
+		select {
+		case <-streamDone:
+		case <-ctx.Done():
+		}
+	}()
+
 	// Send the input message.
 	inputMsg := service.NewMessage(inputBytes)
 	if err := producerFn(ctx, inputMsg); err != nil {
-		streamCancel()
-		slog.Error("failed to send message to bento processor", "error", err, "step", s.name)
+		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: send input message: %w", s.name, err)
 	}
 
@@ -129,21 +149,14 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	var output map[string]any
 	select {
 	case output = <-resultCh:
-		slog.Debug("bento step completed", "step", s.name)
 	case err := <-errCh:
-		streamCancel()
+		s.log.LogProcessingError(s.name, err)
 		return nil, err
 	case <-ctx.Done():
-		streamCancel()
+		s.log.LogProcessingError(s.name, ctx.Err())
 		return nil, ctx.Err()
 	}
 
-	// Stop the stream gracefully.
-	if stopErr := stream.Stop(ctx); stopErr != nil {
-		_ = stopErr // best-effort
-	}
-	streamCancel()
-	<-streamDone
-
+	s.log.LogProcessingComplete(s.name)
 	return &sdk.StepResult{Output: output}, nil
 }

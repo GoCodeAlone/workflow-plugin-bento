@@ -238,6 +238,70 @@ func TestInputModule_PublishMessages(t *testing.T) {
 	}
 }
 
+func TestInputModule_Health(t *testing.T) {
+	pub := &mockMessagePublisher{}
+
+	m, _ := newInputModule("test-input", map[string]any{
+		"target_topic": "test-topic",
+		"input": map[string]any{
+			"generate": map[string]any{
+				"mapping":  `root = {"test": "data"}`,
+				"count":    0,
+				"interval": "1s",
+			},
+		},
+	})
+
+	// Before start: unhealthy
+	report := m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy before start, got %s", report.StatusText)
+	}
+
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	m.SetMessagePublisher(pub)
+
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Wait for the module to report healthy rather than relying on a fixed sleep.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		report = m.Health()
+		if report.Status == HealthStatusHealthy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("module did not become healthy within timeout, last status: %s", report.StatusText)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// After start: healthy
+	report = m.Health()
+	if report.Status != HealthStatusHealthy {
+		t.Errorf("expected healthy after start, got %s", report.StatusText)
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := m.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	// After stop: unhealthy
+	report = m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy after stop, got %s", report.StatusText)
+	}
+}
+
 func TestInputModule_InvalidInputConfig(t *testing.T) {
 	m, _ := newInputModule("test", map[string]any{
 		"target_topic": "test-topic",

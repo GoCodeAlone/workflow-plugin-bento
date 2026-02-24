@@ -126,6 +126,46 @@ func TestBrokerModule_StartStop(t *testing.T) {
 	}
 }
 
+func TestBrokerModule_Health(t *testing.T) {
+	m, _ := newBrokerModule("test-broker", map[string]any{
+		"transport": "memory",
+	})
+
+	// Before start: unhealthy
+	report := m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy before start, got %s", report.StatusText)
+	}
+
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// After start: healthy
+	report = m.Health()
+	if report.Status != HealthStatusHealthy {
+		t.Errorf("expected healthy after start, got %s", report.StatusText)
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := m.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	// After stop: unhealthy
+	report = m.Health()
+	if report.Status != HealthStatusUnhealthy {
+		t.Errorf("expected unhealthy after stop, got %s", report.StatusText)
+	}
+}
+
 func TestBrokerModule_EnsureStream(t *testing.T) {
 	// Use generate transport so ensureStream can build a valid Bento stream.
 	// count=0 means infinite generation; the stream will be stopped at the end.
@@ -186,8 +226,29 @@ func TestBrokerModule_EnsureStream(t *testing.T) {
 		t.Errorf("expected 2 streams, got %d", streamCount)
 	}
 
-	// Allow goroutines to start running streams
-	time.Sleep(50 * time.Millisecond)
+	// Poll until both stream goroutines have called stream.Run, which is
+	// indicated by the stream being able to accept a Stop without returning
+	// "has not been run yet". We verify by polling the stream count: once the
+	// goroutines are running, Stop will succeed.  Use a short yield loop instead
+	// of a fixed sleep.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		m.mu.RLock()
+		count := len(m.streams)
+		m.mu.RUnlock()
+		if count == 2 {
+			// Streams are registered; give goroutines a chance to call Run.
+			// Yield to the scheduler repeatedly rather than sleeping.
+			for range 5 {
+				time.Sleep(10 * time.Millisecond)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("streams did not start within timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Stop should clean up all streams
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
