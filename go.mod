@@ -3,7 +3,7 @@ module github.com/GoCodeAlone/workflow-plugin-bento
 go 1.26
 
 require (
-	github.com/GoCodeAlone/workflow v0.1.5-0.20260222204709-54fb9ff5d076
+	github.com/GoCodeAlone/workflow v0.1.9
 	github.com/warpstreamlabs/bento/v4 v4.0.0-20240606202959-2c57b5fd77f8
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -21,7 +21,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/CrisisTextLine/modular v1.11.11 // indirect
 	github.com/CrisisTextLine/modular/modules/auth v0.4.0 // indirect
-	github.com/CrisisTextLine/modular/modules/eventbus v1.6.0 // indirect
+	github.com/CrisisTextLine/modular/modules/eventbus/v2 v2.0.0 // indirect
 	github.com/DataDog/datadog-go/v5 v5.4.0 // indirect
 	github.com/GoCodeAlone/go-plugin v0.0.0-20260220090904-b4c35f0e4271 // indirect
 	github.com/GoCodeAlone/yaegi v0.17.1 // indirect
@@ -124,7 +124,7 @@ require (
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.1 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -138,8 +138,8 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mpvl/unique v0.0.0-20150818121801-cbe035fff7de // indirect
-	github.com/nats-io/nats.go v1.46.1 // indirect
-	github.com/nats-io/nkeys v0.4.11 // indirect
+	github.com/nats-io/nats.go v1.48.0 // indirect
+	github.com/nats-io/nkeys v0.4.12 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/nsf/jsondiff v0.0.0-20210926074059-1e845ec5d249 // indirect
