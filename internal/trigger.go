@@ -192,9 +192,11 @@ func (t *bentoTrigger) Stop(ctx context.Context) error {
 
 	var firstErr error
 	for i, stream := range streams {
-		if err := stream.Stop(ctx); err != nil && firstErr == nil {
+		if err := stream.Stop(ctx); err != nil {
 			slog.Error("failed to stop trigger stream", "error", err, "index", i)
-			firstErr = fmt.Errorf("bento trigger: stop stream: %w", err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("bento trigger: stop stream: %w", err)
+			}
 		}
 	}
 

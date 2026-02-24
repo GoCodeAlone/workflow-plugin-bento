@@ -99,12 +99,21 @@ func (m *outputModule) Start(ctx context.Context) error {
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
+	m.done = make(chan struct{})
 
 	moduleName := m.name
 	producerFnRef := m.producerFn
 
-	// Subscribe before launching the goroutine so that if Subscribe fails we
-	// have not yet started the stream and there is no goroutine to clean up.
+	go func() {
+		defer close(m.done)
+		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
+			slog.Error("bento output stream failed", "error", err, "module", moduleName)
+		}
+	}()
+
+	// Subscribe after launching the goroutine so that messages flow into the
+	// running stream. If Subscribe fails, cancel the context so the goroutine
+	// exits, wait for it to finish, then return the error.
 	if err := m.subscriber.Subscribe(m.sourceTopic, func(payload []byte, metadata map[string]string) error {
 		slog.Debug("sending message to bento output", "module", moduleName, "topic", m.sourceTopic, "size", len(payload))
 
@@ -119,15 +128,9 @@ func (m *outputModule) Start(ctx context.Context) error {
 		return sendErr
 	}); err != nil {
 		cancel()
+		<-m.done
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
-
-	go func() {
-		defer close(m.done)
-		if err := stream.Run(runCtx); err != nil && runCtx.Err() == nil {
-			slog.Error("bento output stream failed", "error", err, "module", moduleName)
-		}
-	}()
 
 	slog.Info("bento output running", "module", m.name)
 
