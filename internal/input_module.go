@@ -72,8 +72,6 @@ func (m *inputModule) Start(ctx context.Context) error {
 		return fmt.Errorf("bento.input %q: no MessagePublisher set; ensure the host injects one", m.name)
 	}
 
-	slog.Info("starting bento input", "module", m.name, "target_topic", m.targetTopic)
-
 	// Build input YAML from the "input" key of the config.
 	inputCfg, ok := m.config["input"].(map[string]any)
 	if !ok {
@@ -114,8 +112,6 @@ func (m *inputModule) Start(ctx context.Context) error {
 			return nil
 		})
 
-		slog.Debug("forwarding message to host eventbus", "module", moduleName, "topic", topic, "size", len(payload))
-
 		_, pubErr := pub.Publish(topic, payload, meta)
 		if pubErr != nil {
 			metrics.RecordError()
@@ -139,7 +135,6 @@ func (m *inputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	m.health.SetRunning(true)
 	m.metrics.MarkStarted()
 	m.log.LogStreamStart("bento.input",
 		slog.String("target_topic", m.targetTopic),
@@ -148,6 +143,7 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 	go func() {
 		defer close(m.done)
+		m.health.SetRunning(true)
 		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
 			m.health.SetRunning(false)
 			if runErr != nil {
@@ -162,8 +158,6 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 // Stop halts the stream and waits for the goroutine to exit.
 func (m *inputModule) Stop(ctx context.Context) error {
-	slog.Info("stopping bento input", "module", m.name)
-
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
 			m.metrics.RecordError()
@@ -176,7 +170,6 @@ func (m *inputModule) Stop(ctx context.Context) error {
 	}
 	select {
 	case <-m.done:
-		slog.Info("bento input stopped", "module", m.name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}

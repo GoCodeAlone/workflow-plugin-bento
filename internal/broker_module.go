@@ -78,8 +78,6 @@ func (m *brokerModule) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	slog.Info("stopping bento broker", "module", m.name, "topics", len(m.streams))
-
 	var firstErr error
 	for topic, stream := range m.streams {
 		if err := stream.Stop(ctx); err != nil && firstErr == nil {
@@ -87,7 +85,6 @@ func (m *brokerModule) Stop(ctx context.Context) error {
 			m.log.LogStreamError(err, slog.String("topic", topic))
 			firstErr = fmt.Errorf("bento.broker %q: stop stream for topic %q: %w", m.name, topic, err)
 		}
-		slog.Info("broker stream stopped", "module", m.name, "topic", topic)
 	}
 	m.streams = make(map[string]*service.Stream)
 
@@ -123,8 +120,6 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 		return s, nil
 	}
 
-	slog.Info("creating broker stream", "module", m.name, "topic", topic, "transport", m.transport)
-
 	// Build a simple in-memory stream that holds messages for this topic.
 	// The actual transport is configured via transportConfig / transport.
 	builder := service.NewStreamBuilder()
@@ -157,9 +152,6 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 				meta[k] = fmt.Sprintf("%v", v)
 				return nil
 			})
-
-			slog.Debug("broker forwarding message", "module", moduleName, "topic", topic, "size", len(payload))
-
 			_, pubErr := pub.Publish(topic, payload, meta)
 			if pubErr != nil {
 				metrics.RecordError()
@@ -201,7 +193,6 @@ func (m *brokerModule) ensureStream(ctx context.Context, topic string) (*service
 	}()
 
 	m.streams[topic] = stream
-	slog.Info("broker stream created", "module", m.name, "topic", topic)
 	return stream, nil
 }
 

@@ -4,19 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/warpstreamlabs/bento/v4/public/service"
-)
-
-// streamStatus represents the current state of a stream.
-type streamStatus string
-
-const (
-	streamStarting streamStatus = "starting"
-	streamRunning  streamStatus = "running"
-	streamStopped  streamStatus = "stopped"
-	streamErrored  streamStatus = "errored"
 )
 
 // streamModule wraps a complete Bento stream (input → pipeline → output) as a ModuleInstance.
@@ -43,19 +32,6 @@ func newStreamModule(name string, config map[string]any) (*streamModule, error) 
 	}, nil
 }
 
-// Status returns the current stream status.
-func (m *streamModule) Status() streamStatus {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.status
-}
-
-func (m *streamModule) setStatus(status streamStatus) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.status = status
-}
-
 // Init validates the configuration.
 func (m *streamModule) Init() error {
 	if len(m.config) == 0 {
@@ -66,24 +42,18 @@ func (m *streamModule) Init() error {
 
 // Start builds and runs the Bento stream.
 func (m *streamModule) Start(ctx context.Context) error {
-	m.setStatus(streamStarting)
-	slog.Info("starting bento stream", "module", m.name)
-
 	yamlStr, err := configToYAML(m.config)
 	if err != nil {
-		m.setStatus(streamErrored)
 		return fmt.Errorf("bento.stream %q: %w", m.name, err)
 	}
 
 	builder := service.NewStreamBuilder()
 	if err := builder.SetYAML(yamlStr); err != nil {
-		m.setStatus(streamErrored)
 		return fmt.Errorf("bento.stream %q: set yaml: %w", m.name, err)
 	}
 
 	stream, err := builder.Build()
 	if err != nil {
-		m.setStatus(streamErrored)
 		return fmt.Errorf("bento.stream %q: build stream: %w", m.name, err)
 	}
 	m.stream = stream
@@ -91,15 +61,14 @@ func (m *streamModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	m.health.SetRunning(true)
 	m.metrics.MarkStarted()
-
 	m.log.LogStreamStart("bento",
 		slog.Int("config_keys", len(m.config)),
 	)
 
 	go func() {
 		defer close(m.done)
+		m.health.SetRunning(true)
 		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
 			m.health.SetRunning(false)
 			if runErr != nil {
@@ -114,8 +83,6 @@ func (m *streamModule) Start(ctx context.Context) error {
 
 // Stop halts the running stream and waits for the goroutine to exit.
 func (m *streamModule) Stop(ctx context.Context) error {
-	slog.Info("stopping bento stream", "module", m.name)
-
 	if m.stream != nil {
 		if err := m.stream.Stop(ctx); err != nil {
 			m.metrics.RecordError()
@@ -128,8 +95,6 @@ func (m *streamModule) Stop(ctx context.Context) error {
 	}
 	select {
 	case <-m.done:
-		m.setStatus(streamStopped)
-		slog.Info("bento stream stopped", "module", m.name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}

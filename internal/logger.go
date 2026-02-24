@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"log/slog"
 )
 
@@ -44,6 +45,9 @@ func (l *bentoLogger) LogStreamError(err error, extraFields ...any) {
 
 // LogMessageProcessed emits a debug-level log line each time a message is processed.
 func (l *bentoLogger) LogMessageProcessed(topic string, extraFields ...any) {
+	if !l.logger.Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
 	args := append([]any{slog.String("topic", topic)}, extraFields...)
 	l.logger.Debug("message processed", args...)
 }
@@ -60,12 +64,18 @@ func (l *bentoLogger) LogTopicEvent(event, topic string, extraFields ...any) {
 
 // LogProcessingStart emits a debug-level log line when a processor step begins.
 func (l *bentoLogger) LogProcessingStart(stepName string, extraFields ...any) {
+	if !l.logger.Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
 	args := append([]any{slog.String("step", stepName)}, extraFields...)
 	l.logger.Debug("processing started", args...)
 }
 
 // LogProcessingComplete emits a debug-level log line when a processor step finishes.
 func (l *bentoLogger) LogProcessingComplete(stepName string, extraFields ...any) {
+	if !l.logger.Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
 	args := append([]any{slog.String("step", stepName)}, extraFields...)
 	l.logger.Debug("processing complete", args...)
 }

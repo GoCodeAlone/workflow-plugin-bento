@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 	"github.com/warpstreamlabs/bento/v4/public/service"
@@ -90,12 +89,9 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	resultCh := make(chan map[string]any, 1)
 	errCh := make(chan error, 1)
 
-	stepName := s.name
-
 	if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 		raw, err := msg.AsBytes()
 		if err != nil {
-			slog.Error("failed to read processed message", "error", err, "step", stepName)
 			errCh <- fmt.Errorf("read processed message: %w", err)
 			return err
 		}
@@ -119,17 +115,22 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	// Run stream in background; stop it once we've received the result.
 	streamCtx, streamCancel := context.WithCancel(ctx)
-	defer streamCancel()
 
 	streamDone := make(chan error, 1)
 	go func() {
 		streamDone <- stream.Run(streamCtx)
 	}()
 
+	// Ensure stream is stopped and drained on all exit paths from this point.
+	defer func() {
+		streamCancel()
+		_ = stream.Stop(context.Background())
+		<-streamDone
+	}()
+
 	// Send the input message.
 	inputMsg := service.NewMessage(inputBytes)
 	if err := producerFn(ctx, inputMsg); err != nil {
-		streamCancel()
 		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: send input message: %w", s.name, err)
 	}
@@ -138,23 +139,13 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	var output map[string]any
 	select {
 	case output = <-resultCh:
-		slog.Debug("bento step completed", "step", s.name)
 	case err := <-errCh:
-		streamCancel()
 		s.log.LogProcessingError(s.name, err)
 		return nil, err
 	case <-ctx.Done():
-		streamCancel()
 		s.log.LogProcessingError(s.name, ctx.Err())
 		return nil, ctx.Err()
 	}
-
-	// Stop the stream gracefully.
-	if stopErr := stream.Stop(ctx); stopErr != nil {
-		_ = stopErr // best-effort
-	}
-	streamCancel()
-	<-streamDone
 
 	s.log.LogProcessingComplete(s.name)
 	return &sdk.StepResult{Output: output}, nil
