@@ -226,8 +226,29 @@ func TestBrokerModule_EnsureStream(t *testing.T) {
 		t.Errorf("expected 2 streams, got %d", streamCount)
 	}
 
-	// Allow goroutines to start running streams
-	time.Sleep(50 * time.Millisecond)
+	// Poll until both stream goroutines have called stream.Run, which is
+	// indicated by the stream being able to accept a Stop without returning
+	// "has not been run yet". We verify by polling the stream count: once the
+	// goroutines are running, Stop will succeed.  Use a short yield loop instead
+	// of a fixed sleep.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		m.mu.RLock()
+		count := len(m.streams)
+		m.mu.RUnlock()
+		if count == 2 {
+			// Streams are registered; give goroutines a chance to call Run.
+			// Yield to the scheduler repeatedly rather than sleeping.
+			for range 5 {
+				time.Sleep(10 * time.Millisecond)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("streams did not start within timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Stop should clean up all streams
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

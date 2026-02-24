@@ -20,17 +20,26 @@ func configToYAML(config map[string]any) (string, error) {
 // mapToMessage converts a map to a Bento service.Message.
 // If the map has a "body" key, its JSON representation becomes the message bytes.
 // Additional metadata keys are attached.
-func mapToMessage(data map[string]any) *service.Message {
+// An error is returned if JSON marshalling of the body fails.
+func mapToMessage(data map[string]any) (*service.Message, error) {
 	var body []byte
 
 	if b, ok := data["body"]; ok {
 		if s, ok2 := b.(string); ok2 {
 			body = []byte(s)
 		} else {
-			body, _ = json.Marshal(b)
+			var err error
+			body, err = json.Marshal(b)
+			if err != nil {
+				return nil, fmt.Errorf("marshal message body: %w", err)
+			}
 		}
 	} else {
-		body, _ = json.Marshal(data)
+		var err error
+		body, err = json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("marshal message data: %w", err)
+		}
 	}
 
 	msg := service.NewMessage(body)
@@ -41,7 +50,7 @@ func mapToMessage(data map[string]any) *service.Message {
 		}
 	}
 
-	return msg
+	return msg, nil
 }
 
 // The message body is decoded as JSON if possible; otherwise stored as a raw string.

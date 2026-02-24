@@ -128,7 +128,10 @@ func TestMapToMessage_WithBody(t *testing.T) {
 		"body": "hello world",
 	}
 
-	msg := mapToMessage(data)
+	msg, err := mapToMessage(data)
+	if err != nil {
+		t.Fatalf("mapToMessage() returned error: %v", err)
+	}
 	if msg == nil {
 		t.Fatal("mapToMessage() returned nil")
 	}
@@ -147,7 +150,10 @@ func TestMapToMessage_WithJSONBody(t *testing.T) {
 		"body": map[string]any{"key": "value"},
 	}
 
-	msg := mapToMessage(data)
+	msg, err := mapToMessage(data)
+	if err != nil {
+		t.Fatalf("mapToMessage() returned error: %v", err)
+	}
 	if msg == nil {
 		t.Fatal("mapToMessage() returned nil")
 	}
@@ -166,7 +172,10 @@ func TestMapToMessage_WithoutBody_MarshalsFull(t *testing.T) {
 		"key": "value",
 	}
 
-	msg := mapToMessage(data)
+	msg, err := mapToMessage(data)
+	if err != nil {
+		t.Fatalf("mapToMessage() returned error: %v", err)
+	}
 	if msg == nil {
 		t.Fatal("mapToMessage() returned nil")
 	}
@@ -188,7 +197,10 @@ func TestMapToMessage_WithMetadata(t *testing.T) {
 		},
 	}
 
-	msg := mapToMessage(data)
+	msg, err := mapToMessage(data)
+	if err != nil {
+		t.Fatalf("mapToMessage() returned error: %v", err)
+	}
 	if msg == nil {
 		t.Fatal("mapToMessage() returned nil")
 	}
@@ -203,7 +215,10 @@ func TestMapToMessage_WithMetadata(t *testing.T) {
 }
 
 func TestMapToMessage_EmptyMap(t *testing.T) {
-	msg := mapToMessage(map[string]any{})
+	msg, err := mapToMessage(map[string]any{})
+	if err != nil {
+		t.Fatalf("mapToMessage() with empty map returned error: %v", err)
+	}
 	if msg == nil {
 		t.Fatal("mapToMessage() with empty map returned nil")
 	}
@@ -220,7 +235,10 @@ func TestRoundTrip_MessageToMapToMessage(t *testing.T) {
 	}
 
 	// Convert back to message.
-	reconstructed := mapToMessage(m)
+	reconstructed, err := mapToMessage(m)
+	if err != nil {
+		t.Fatalf("mapToMessage() returned error: %v", err)
+	}
 	if reconstructed == nil {
 		t.Fatal("mapToMessage() returned nil")
 	}

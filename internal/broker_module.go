@@ -75,18 +75,25 @@ func (m *brokerModule) Start(_ context.Context) error {
 
 // Stop shuts down all managed streams.
 func (m *brokerModule) Stop(ctx context.Context) error {
+	// Copy the streams map under the lock, then release it before calling
+	// stream.Stop to avoid holding the lock during potentially blocking I/O
+	// (deadlock risk if a stream goroutine also acquires the lock).
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	toStop := make(map[string]*service.Stream, len(m.streams))
+	for topic, s := range m.streams {
+		toStop[topic] = s
+	}
+	m.streams = make(map[string]*service.Stream)
+	m.mu.Unlock()
 
 	var firstErr error
-	for topic, stream := range m.streams {
+	for topic, stream := range toStop {
 		if err := stream.Stop(ctx); err != nil && firstErr == nil {
 			m.metrics.RecordError()
 			m.log.LogStreamError(err, slog.String("topic", topic))
 			firstErr = fmt.Errorf("bento.broker %q: stop stream for topic %q: %w", m.name, topic, err)
 		}
 	}
-	m.streams = make(map[string]*service.Stream)
 
 	m.health.SetRunning(false)
 	m.metrics.MarkStopped()

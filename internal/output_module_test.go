@@ -220,8 +220,17 @@ func TestOutputModule_SubscribeAndReceiveMessages(t *testing.T) {
 		t.Errorf("SimulateMessage() error = %v", err)
 	}
 
-	// Allow time for processing
-	time.Sleep(50 * time.Millisecond)
+	// Wait until the module has processed the message rather than sleeping.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if m.metrics.Snapshot().MessagesIn >= 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("message was not processed within timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

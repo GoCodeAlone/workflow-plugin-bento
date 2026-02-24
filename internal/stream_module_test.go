@@ -113,8 +113,17 @@ func TestStreamModule_StartStop(t *testing.T) {
 			t.Fatalf("Start() error = %v", err)
 		}
 
-		// Let it run briefly
-		time.Sleep(50 * time.Millisecond)
+		// Wait until the stream is running before stopping.
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			if m.Health().Status == HealthStatusHealthy {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("stream did not become healthy within timeout")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 
 		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

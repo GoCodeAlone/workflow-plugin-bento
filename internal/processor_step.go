@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 	"github.com/warpstreamlabs/bento/v4/public/service"
@@ -85,14 +86,18 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 		return nil, fmt.Errorf("step.bento %q: add processor yaml: %w", s.name, err)
 	}
 
-	// Collect results via consumer.
+	// Collect results via consumer. sync.Once ensures only the first message
+	// (or error) is captured; if the processor emits multiple messages the
+	// remaining ones are acknowledged and discarded rather than blocking the
+	// fixed-size channel and deadlocking the consumer goroutine.
 	resultCh := make(chan map[string]any, 1)
 	errCh := make(chan error, 1)
+	var once sync.Once
 
 	if err := builder.AddConsumerFunc(func(_ context.Context, msg *service.Message) error {
 		raw, err := msg.AsBytes()
 		if err != nil {
-			errCh <- fmt.Errorf("read processed message: %w", err)
+			once.Do(func() { errCh <- fmt.Errorf("read processed message: %w", err) })
 			return err
 		}
 		var out map[string]any
@@ -100,7 +105,7 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 			// Not JSON — store raw string under "output".
 			out = map[string]any{"output": string(raw)}
 		}
-		resultCh <- out
+		once.Do(func() { resultCh <- out })
 		return nil
 	}); err != nil {
 		s.log.LogProcessingError(s.name, err)
@@ -122,10 +127,15 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	}()
 
 	// Ensure stream is stopped and drained on all exit paths from this point.
+	// Use a select on ctx.Done() when waiting for the stream goroutine so that
+	// a cancelled parent context does not cause an unconditional deadlock here.
 	defer func() {
 		streamCancel()
 		_ = stream.Stop(context.Background())
-		<-streamDone
+		select {
+		case <-streamDone:
+		case <-ctx.Done():
+		}
 	}()
 
 	// Send the input message.

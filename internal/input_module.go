@@ -65,6 +65,16 @@ func (m *inputModule) Init() error {
 	return nil
 }
 
+// inputTransportType extracts the top-level key from the input config map,
+// which represents the actual Bento input type (e.g. "kafka", "generate").
+// Falls back to "bento.input" if the type cannot be determined.
+func inputTransportType(inputCfg map[string]any) string {
+	for k := range inputCfg {
+		return k
+	}
+	return "bento.input"
+}
+
 // Start builds and runs the Bento input stream. Each message received is
 // published to the host EventBus topic.
 func (m *inputModule) Start(ctx context.Context) error {
@@ -136,7 +146,10 @@ func (m *inputModule) Start(ctx context.Context) error {
 	m.cancel = cancel
 
 	m.metrics.MarkStarted()
-	m.log.LogStreamStart("bento.input",
+	// Extract the actual input transport type (e.g. "kafka", "generate") for
+	// more informative log output instead of the generic module type string.
+	transport := inputTransportType(inputCfg)
+	m.log.LogStreamStart(transport,
 		slog.String("target_topic", m.targetTopic),
 		slog.String("target_broker", m.targetBroker),
 	)

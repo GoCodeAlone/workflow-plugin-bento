@@ -66,6 +66,16 @@ func (m *outputModule) Init() error {
 	return nil
 }
 
+// outputTransportType extracts the top-level key from the output config map,
+// which represents the actual Bento output type (e.g. "kafka", "drop").
+// Falls back to "bento.output" if the type cannot be determined.
+func outputTransportType(outputCfg map[string]any) string {
+	for k := range outputCfg {
+		return k
+	}
+	return "bento.output"
+}
+
 // Start builds the Bento output stream, registers a producer func, and
 // subscribes to the host EventBus topic. Incoming messages are fed into Bento
 // for delivery.
@@ -73,6 +83,9 @@ func (m *outputModule) Start(ctx context.Context) error {
 	if m.subscriber == nil {
 		return fmt.Errorf("bento.output %q: no MessageSubscriber set; ensure the host injects one", m.name)
 	}
+
+	// Reinitialize done so the module can be restarted after a previous Stop.
+	m.done = make(chan struct{})
 
 	// Build output YAML from the "output" key of the config.
 	outputCfg, ok := m.config["output"].(map[string]any)
@@ -135,7 +148,9 @@ func (m *outputModule) Start(ctx context.Context) error {
 	}
 
 	m.metrics.MarkStarted()
-	m.log.LogStreamStart("bento.output",
+	// Extract the actual output transport type (e.g. "kafka", "drop") for
+	// more informative log output instead of the generic module type string.
+	m.log.LogStreamStart(outputTransportType(outputCfg),
 		slog.String("source_topic", m.sourceTopic),
 		slog.String("source_broker", m.sourceBroker),
 	)
