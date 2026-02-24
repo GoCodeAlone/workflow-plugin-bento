@@ -135,7 +135,6 @@ func (m *inputModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	m.health.SetRunning(true)
 	m.metrics.MarkStarted()
 	m.log.LogStreamStart("bento.input",
 		slog.String("target_topic", m.targetTopic),
@@ -144,6 +143,7 @@ func (m *inputModule) Start(ctx context.Context) error {
 
 	go func() {
 		defer close(m.done)
+		m.health.SetRunning(true)
 		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
 			m.health.SetRunning(false)
 			if runErr != nil {

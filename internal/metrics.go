@@ -8,16 +8,19 @@ import (
 
 // StreamMetrics tracks runtime statistics for a single stream or module.
 // All counter operations are thread-safe via atomic primitives; the
-// startTime/stopTime/lastMessageTime fields are guarded by a small mutex.
+// startTime/stopTime fields are guarded by a small mutex, while
+// lastMessageTimeNs is stored atomically (Unix nanoseconds) to avoid
+// mutex contention on hot message paths.
 type StreamMetrics struct {
 	messagesIn  atomic.Int64
 	messagesOut atomic.Int64
 	errors      atomic.Int64
 
-	mu              sync.Mutex
-	startTime       time.Time
-	stopTime        time.Time
-	lastMessageTime time.Time
+	lastMessageTimeNs atomic.Int64
+
+	mu        sync.Mutex
+	startTime time.Time
+	stopTime  time.Time
 }
 
 // newStreamMetrics creates a new StreamMetrics instance. Call MarkStarted
@@ -47,21 +50,17 @@ func (m *StreamMetrics) MarkStopped() {
 }
 
 // RecordMessageIn increments the inbound message counter and updates
-// lastMessageTime.
+// lastMessageTimeNs atomically.
 func (m *StreamMetrics) RecordMessageIn() {
 	m.messagesIn.Add(1)
-	m.mu.Lock()
-	m.lastMessageTime = time.Now()
-	m.mu.Unlock()
+	m.lastMessageTimeNs.Store(time.Now().UnixNano())
 }
 
 // RecordMessageOut increments the outbound message counter and updates
-// lastMessageTime.
+// lastMessageTimeNs atomically.
 func (m *StreamMetrics) RecordMessageOut() {
 	m.messagesOut.Add(1)
-	m.mu.Lock()
-	m.lastMessageTime = time.Now()
-	m.mu.Unlock()
+	m.lastMessageTimeNs.Store(time.Now().UnixNano())
 }
 
 // RecordError increments the error counter.
@@ -102,9 +101,11 @@ func (m *StreamMetrics) Uptime() time.Duration {
 // LastMessageTime returns the time the last message was recorded.
 // Returns the zero value if no messages have been recorded yet.
 func (m *StreamMetrics) LastMessageTime() time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.lastMessageTime
+	ns := m.lastMessageTimeNs.Load()
+	if ns == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns)
 }
 
 // MetricsSnapshot is a point-in-time copy of StreamMetrics that can be
@@ -128,8 +129,12 @@ func (m *StreamMetrics) Snapshot() MetricsSnapshot {
 			uptime = time.Since(m.startTime)
 		}
 	}
-	lastMsg := m.lastMessageTime
 	m.mu.Unlock()
+
+	var lastMsg time.Time
+	if ns := m.lastMessageTimeNs.Load(); ns != 0 {
+		lastMsg = time.Unix(0, ns)
+	}
 
 	return MetricsSnapshot{
 		MessagesIn:      m.messagesIn.Load(),

@@ -134,7 +134,6 @@ func (m *outputModule) Start(ctx context.Context) error {
 		return fmt.Errorf("bento.output %q: subscribe to topic %q: %w", m.name, m.sourceTopic, err)
 	}
 
-	m.health.SetRunning(true)
 	m.metrics.MarkStarted()
 	m.log.LogStreamStart("bento.output",
 		slog.String("source_topic", m.sourceTopic),
@@ -143,6 +142,7 @@ func (m *outputModule) Start(ctx context.Context) error {
 
 	go func() {
 		defer close(m.done)
+		m.health.SetRunning(true)
 		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
 			m.health.SetRunning(false)
 			if runErr != nil {

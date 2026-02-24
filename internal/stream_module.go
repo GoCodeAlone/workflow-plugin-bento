@@ -61,15 +61,14 @@ func (m *streamModule) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	m.health.SetRunning(true)
 	m.metrics.MarkStarted()
-
 	m.log.LogStreamStart("bento",
 		slog.Int("config_keys", len(m.config)),
 	)
 
 	go func() {
 		defer close(m.done)
+		m.health.SetRunning(true)
 		if runErr := stream.Run(runCtx); runCtx.Err() == nil {
 			m.health.SetRunning(false)
 			if runErr != nil {

@@ -115,17 +115,22 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 
 	// Run stream in background; stop it once we've received the result.
 	streamCtx, streamCancel := context.WithCancel(ctx)
-	defer streamCancel()
 
 	streamDone := make(chan error, 1)
 	go func() {
 		streamDone <- stream.Run(streamCtx)
 	}()
 
+	// Ensure stream is stopped and drained on all exit paths from this point.
+	defer func() {
+		streamCancel()
+		_ = stream.Stop(context.Background())
+		<-streamDone
+	}()
+
 	// Send the input message.
 	inputMsg := service.NewMessage(inputBytes)
 	if err := producerFn(ctx, inputMsg); err != nil {
-		streamCancel()
 		s.log.LogProcessingError(s.name, err)
 		return nil, fmt.Errorf("step.bento %q: send input message: %w", s.name, err)
 	}
@@ -135,21 +140,12 @@ func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any,
 	select {
 	case output = <-resultCh:
 	case err := <-errCh:
-		streamCancel()
 		s.log.LogProcessingError(s.name, err)
 		return nil, err
 	case <-ctx.Done():
-		streamCancel()
 		s.log.LogProcessingError(s.name, ctx.Err())
 		return nil, ctx.Err()
 	}
-
-	// Stop the stream gracefully.
-	if stopErr := stream.Stop(ctx); stopErr != nil {
-		_ = stopErr // best-effort
-	}
-	streamCancel()
-	<-streamDone
 
 	s.log.LogProcessingComplete(s.name)
 	return &sdk.StepResult{Output: output}, nil

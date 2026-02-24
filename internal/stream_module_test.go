@@ -181,8 +181,18 @@ func TestStreamModule_Health(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Allow the stream goroutine to call Run before checking health / stopping.
-	time.Sleep(50 * time.Millisecond)
+	// Wait for the stream goroutine to report healthy before checking health / stopping.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		report = m.Health()
+		if report.Status == HealthStatusHealthy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected healthy after start within timeout, got %s", report.StatusText)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// After start: healthy
 	report = m.Health()
