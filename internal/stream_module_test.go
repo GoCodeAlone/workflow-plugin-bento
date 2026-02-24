@@ -219,7 +219,9 @@ func TestStreamModule_StatusTransitions(t *testing.T) {
 
 		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = m.Stop(stopCtx)
+		if err := m.Stop(stopCtx); err != nil {
+			t.Fatalf("Stop() error = %v", err)
+		}
 	})
 
 	t.Run("status is stopped after successful stop", func(t *testing.T) {
