@@ -6,6 +6,10 @@ package main
 import (
 	"github.com/GoCodeAlone/workflow-plugin-bento/internal"
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
+
+	// Register pure Bento components (mapping/bloblang processors, generate input, etc.)
+	// so that step.bento can execute Bloblang transforms at runtime.
+	_ "github.com/warpstreamlabs/bento/v4/public/components/pure"
 )
 
 func main() {

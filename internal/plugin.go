@@ -62,8 +62,12 @@ func (p *bentoPlugin) CreateStep(typeName, name string, config map[string]any) (
 }
 
 // TriggerTypes returns the trigger type names this plugin provides.
+// Note: trigger support via the external plugin gRPC bridge is not yet fully
+// implemented in the host adapter (CreateTrigger RPC is missing). Returning an
+// empty list avoids a registration failure that would prevent step.bento from
+// loading. Triggers can be re-enabled once the host adapter supports them.
 func (p *bentoPlugin) TriggerTypes() []string {
-	return []string{"bento"}
+	return []string{}
 }
 
 // CreateTrigger creates a trigger instance of the given type.
