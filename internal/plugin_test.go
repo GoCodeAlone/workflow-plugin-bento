@@ -206,13 +206,11 @@ func TestBentoPlugin_TriggerTypes(t *testing.T) {
 
 	types := triggerProvider.TriggerTypes()
 
-	expected := []string{"bento"}
-	if len(types) != len(expected) {
-		t.Errorf("expected %d trigger types, got %d", len(expected), len(types))
-	}
-
-	if types[0] != expected[0] {
-		t.Errorf("expected trigger type %q, got %q", expected[0], types[0])
+	// TriggerTypes intentionally returns empty because the host adapter
+	// does not yet support the CreateTrigger RPC. Advertising trigger types
+	// would cause a registration failure that prevents step.bento from loading.
+	if len(types) != 0 {
+		t.Errorf("expected 0 trigger types (triggers disabled), got %d: %v", len(types), types)
 	}
 }
 
