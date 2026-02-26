@@ -142,7 +142,7 @@ func (m *inputModule) Start(ctx context.Context) error {
 	}
 	m.stream = stream
 
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
 
 	m.metrics.MarkStarted()

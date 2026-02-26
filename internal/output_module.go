@@ -115,7 +115,7 @@ func (m *outputModule) Start(ctx context.Context) error {
 	}
 	m.stream = stream
 
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
 
 	// Subscribe to the host EventBus topic before starting the stream. When
