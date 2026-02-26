@@ -8,5 +8,16 @@
     "license": "MIT",
     "minEngineVersion": "0.1.0",
     "keywords": ["bento", "streaming", "kafka", "sqs", "pubsub"],
-    "capabilities": []
+    "capabilities": {
+        "modules": [
+            "bento.stream",
+            "bento.input",
+            "bento.output",
+            "bento.broker"
+        ],
+        "steps": [
+            "step.bento"
+        ],
+        "triggers": []
+    }
 }
