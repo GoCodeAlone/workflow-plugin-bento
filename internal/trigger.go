@@ -94,7 +94,7 @@ func (t *bentoTrigger) parseSubscriptions() error {
 func (t *bentoTrigger) Start(ctx context.Context) error {
 	slog.Info("starting bento trigger", "subscriptions", len(t.subscriptions))
 
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(ctx)
 
 	t.mu.Lock()
 	t.cancel = cancel
@@ -176,7 +176,6 @@ func (t *bentoTrigger) Start(ctx context.Context) error {
 		slog.Info("all bento trigger streams exited")
 	}()
 
-	_ = ctx
 	return nil
 }
 
