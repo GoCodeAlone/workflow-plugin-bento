@@ -3,7 +3,7 @@ module github.com/GoCodeAlone/workflow-plugin-bento
 go 1.26
 
 require (
-	github.com/GoCodeAlone/workflow v0.2.21
+	github.com/GoCodeAlone/workflow v0.3.0
 	github.com/warpstreamlabs/bento/v4 v4.0.0-20240606202959-2c57b5fd77f8
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -132,7 +132,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/json-iterator/go v1.1.13-0.20220915233716-71ac16282d12 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
