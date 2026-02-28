@@ -21,57 +21,76 @@ This plugin extends the workflow engine with:
 
 The plugin runs as a subprocess. The host workflow engine launches it on startup and communicates over a local gRPC socket managed by the go-plugin framework.
 
-```
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  Host Process (workflow engine)                                  │
-  │                                                                  │
-  │   ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-  │   │  HTTP/Event  │    │   EventBus   │    │  Module Registry │  │
-  │   │   Triggers   │───>│   (broker)   │<───│  bento.input     │  │
-  │   └──────────────┘    └──────┬───────┘    │  bento.output    │  │
-  │                              │            │  bento.stream    │  │
-  │                              │            │  bento.broker    │  │
-  │                              │            └──────────────────┘  │
-  │                              │                                  │
-  └──────────────────────────────┼──────────────────────────────────┘
-                                 │  go-plugin gRPC (IPC)
-  ┌──────────────────────────────┼──────────────────────────────────┐
-  │  Plugin Subprocess (bento)   │                                  │
-  │                              │                                  │
-  │   ┌──────────────────────────▼───────────────────────────────┐  │
-  │   │                    BentoPlugin                           │  │
-  │   │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │  │
-  │   │  │ Bento Input │  │   Bloblang   │  │ Bento Output  │   │  │
-  │   │  │  (consumer) │  │  Processors  │  │  (producer)   │   │  │
-  │   │  └──────┬──────┘  └──────────────┘  └───────┬───────┘   │  │
-  │   └─────────┼─────────────────────────────────────┼──────────┘  │
-  │             │                                     │             │
-  └─────────────┼─────────────────────────────────────┼─────────────┘
-                │                                     │
-     External Source                           External Sink
-  (Kafka / SQS / HTTP / ...)              (S3 / Pub/Sub / NATS / ...)
+```mermaid
+graph TB
+    subgraph HostProcess["Host Process (workflow engine)"]
+        Triggers["HTTP/Event Triggers"]
+        EventBus["EventBus (broker)"]
+        subgraph ModuleRegistry["Module Registry"]
+            BentoInputMod["bento.input"]
+            BentoOutputMod["bento.output"]
+            BentoStreamMod["bento.stream"]
+            BentoBrokerMod["bento.broker"]
+        end
+        Triggers --> EventBus
+        BentoInputMod --> EventBus
+        BentoOutputMod --> EventBus
+        BentoStreamMod --> EventBus
+        BentoBrokerMod --> EventBus
+    end
+
+    EventBus <-->|"go-plugin gRPC (IPC)"| BentoPlugin
+
+    subgraph PluginSubprocess["Plugin Subprocess (bento)"]
+        subgraph BentoPlugin["BentoPlugin"]
+            BInput["Bento Input (consumer)"]
+            Bloblang["Bloblang Processors"]
+            BOutput["Bento Output (producer)"]
+            BInput --> Bloblang --> BOutput
+        end
+    end
+
+    ExtSource["External Source\n(Kafka / SQS / HTTP / ...)"] --> BInput
+    BOutput --> ExtSink["External Sink\n(S3 / Pub/Sub / NATS / ...)"]
 ```
 
 ### Message Flow
 
 **Input path** (`bento.input`):
-```
-External Source -> Bento Input -> go-plugin gRPC -> Host EventBus -> Workflow Handler
+
+```mermaid
+flowchart LR
+    ExtSource["External Source"] --> BentoInput["Bento Input"]
+    BentoInput --> gRPC["go-plugin gRPC"]
+    gRPC --> HostEB["Host EventBus"]
+    HostEB --> WorkflowHandler["Workflow Handler"]
 ```
 
 **Output path** (`bento.output`):
-```
-Workflow Handler -> Host EventBus -> go-plugin gRPC -> Bento Output -> External Sink
+
+```mermaid
+flowchart LR
+    WorkflowHandler["Workflow Handler"] --> HostEB["Host EventBus"]
+    HostEB --> gRPC["go-plugin gRPC"]
+    gRPC --> BentoOutput["Bento Output"]
+    BentoOutput --> ExtSink["External Sink"]
 ```
 
 **Full stream** (`bento.stream`):
-```
-External Source -> Bento Pipeline (Bloblang) -> External Sink
+
+```mermaid
+flowchart LR
+    ExtSource["External Source"] --> BentoPipeline["Bento Pipeline (Bloblang)"]
+    BentoPipeline --> ExtSink["External Sink"]
 ```
 
 **Inline step** (`step.bento`):
-```
-Workflow Step Input -> go-plugin gRPC -> Bento Processors (Bloblang) -> Workflow Step Output
+
+```mermaid
+flowchart LR
+    StepInput["Workflow Step Input"] --> gRPC["go-plugin gRPC"]
+    gRPC --> Processors["Bento Processors (Bloblang)"]
+    Processors --> StepOutput["Workflow Step Output"]
 ```
 
 ## Installation
