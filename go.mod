@@ -3,7 +3,7 @@ module github.com/GoCodeAlone/workflow-plugin-bento
 go 1.26
 
 require (
-	github.com/GoCodeAlone/workflow v0.3.0
+	github.com/GoCodeAlone/workflow v0.3.1
 	github.com/warpstreamlabs/bento/v4 v4.0.0-20240606202959-2c57b5fd77f8
 	gopkg.in/yaml.v3 v3.0.1
 )
