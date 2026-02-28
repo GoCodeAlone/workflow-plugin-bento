@@ -22,7 +22,7 @@ This plugin extends the workflow engine with:
 The plugin runs as a subprocess. The host workflow engine launches it on startup and communicates over a local gRPC socket managed by the go-plugin framework.
 
 ```mermaid
-graph TB
+flowchart TB
     subgraph HostProcess["Host Process (workflow engine)"]
         Triggers["HTTP/Event Triggers"]
         EventBus["EventBus (broker)"]
