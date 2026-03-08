@@ -1,75 +1,30 @@
 name: Release
-
 on:
   push:
-    tags:
-      - 'v*'
-
+    tags: ['v*']
 permissions:
   contents: write
-
 env:
   GONOSUMCHECK: github.com/GoCodeAlone/*
   GONOSUMDB: github.com/GoCodeAlone/*
   GOPRIVATE: github.com/GoCodeAlone/*
-
 jobs:
   release:
-    name: Build and Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
           cache: true
-
       - name: Configure git for private modules
         run: git config --global url."https://${{ secrets.RELEASES_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
-      - name: Resolve dependencies
-        run: go mod tidy
-
-      - name: Build binaries
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          LDFLAGS="-ldflags \"-X main.version=${VERSION}\""
-
-          declare -a PLATFORMS=("linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64")
-          mkdir -p bin
-
-          for platform in "${PLATFORMS[@]}"; do
-            os="${platform%%/*}"
-            arch="${platform##*/}"
-            output="bin/workflow-plugin-bento-${os}-${arch}"
-            echo "Building ${output}..."
-            GOOS=${os} GOARCH=${arch} go build -ldflags "-X main.version=${VERSION}" \
-              -o "${output}" ./cmd/workflow-plugin-bento
-          done
-
-          ls -la bin/
-
-      - name: Create release archives
-        run: |
-          mkdir -p dist
-          for binary in bin/workflow-plugin-bento-*; do
-            name=$(basename "${binary}")
-            tar -czf "dist/${name}.tar.gz" -C bin "${name}"
-            sha256sum "dist/${name}.tar.gz" >> dist/checksums.txt
-          done
-          cp plugin.json dist/ 2>/dev/null || echo '{"name":"workflow-plugin-bento","version":"'${GITHUB_REF#refs/tags/}'"}' > dist/plugin.json
-          ls -la dist/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
         with:
-          files: |
-            dist/*.tar.gz
-            dist/checksums.txt
-            dist/plugin.json
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
