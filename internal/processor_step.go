@@ -47,7 +47,7 @@ func newProcessorStep(name string, config map[string]any) (*processorStep, error
 
 // Execute runs the input data through the configured Bento processors and
 // returns the transformed output.
-func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any, _ map[string]map[string]any, current map[string]any, _ map[string]any) (*sdk.StepResult, error) {
+func (s *processorStep) Execute(ctx context.Context, triggerData map[string]any, _ map[string]map[string]any, current map[string]any, _ map[string]any, _ map[string]any) (*sdk.StepResult, error) {
 	s.log.LogProcessingStart(s.name)
 
 	// Merge current + triggerData as the step input.
