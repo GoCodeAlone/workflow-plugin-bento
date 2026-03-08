@@ -81,7 +81,7 @@ func TestProcessorStep_ExecutePassthrough(t *testing.T) {
 	triggerData := map[string]any{"trigger": "value"}
 	current := map[string]any{"current": "data"}
 
-	result, err := s.Execute(ctx, triggerData, nil, current, nil)
+	result, err := s.Execute(ctx, triggerData, nil, current, nil, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -147,7 +147,7 @@ func TestProcessorStep_ExecuteWithBloblang(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			result, err := s.Execute(ctx, tt.input, nil, map[string]any{}, nil)
+			result, err := s.Execute(ctx, tt.input, nil, map[string]any{}, nil, nil)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
@@ -183,7 +183,7 @@ func TestProcessorStep_ExecuteWithInvalidBloblang(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	result, err := s.Execute(ctx, map[string]any{"data": "test"}, nil, map[string]any{}, nil)
+	result, err := s.Execute(ctx, map[string]any{"data": "test"}, nil, map[string]any{}, nil, nil)
 
 	if err == nil {
 		t.Error("Execute() expected error for invalid Bloblang syntax, got nil")
@@ -205,7 +205,7 @@ func TestProcessorStep_ExecuteMergesInputs(t *testing.T) {
 	triggerData := map[string]any{"from_trigger": "trigger_val"}
 	current := map[string]any{"from_current": "current_val"}
 
-	result, err := s.Execute(ctx, triggerData, nil, current, nil)
+	result, err := s.Execute(ctx, triggerData, nil, current, nil, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -229,7 +229,7 @@ func TestProcessorStep_ExecuteWithNonJSONOutput(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result, err := s.Execute(ctx, map[string]any{"input": "test"}, nil, map[string]any{}, nil)
+	result, err := s.Execute(ctx, map[string]any{"input": "test"}, nil, map[string]any{}, nil, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -251,7 +251,7 @@ func TestProcessorStep_ExecuteWithContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	_, err = s.Execute(ctx, map[string]any{"data": "test"}, nil, map[string]any{}, nil)
+	_, err = s.Execute(ctx, map[string]any{"data": "test"}, nil, map[string]any{}, nil, nil)
 
 	if err == nil {
 		t.Error("Execute() expected error with cancelled context")
@@ -270,7 +270,7 @@ func TestProcessorStep_ExecuteWithMultipleProcessors(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result, err := s.Execute(ctx, map[string]any{"input": "hello"}, nil, map[string]any{}, nil)
+	result, err := s.Execute(ctx, map[string]any{"input": "hello"}, nil, map[string]any{}, nil, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
