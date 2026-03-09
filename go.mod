@@ -3,7 +3,7 @@ module github.com/GoCodeAlone/workflow-plugin-bento
 go 1.26.0
 
 require (
-	github.com/GoCodeAlone/workflow v0.3.29
+	github.com/GoCodeAlone/workflow v0.3.30
 	github.com/warpstreamlabs/bento/v4 v4.0.0-20240606202959-2c57b5fd77f8
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -23,7 +23,7 @@ require (
 	github.com/GoCodeAlone/go-plugin v0.0.0-20260220090904-b4c35f0e4271 // indirect
 	github.com/GoCodeAlone/modular v1.12.0 // indirect
 	github.com/GoCodeAlone/modular/modules/auth v1.12.0 // indirect
-	github.com/GoCodeAlone/modular/modules/eventbus/v2 v2.5.0 // indirect
+	github.com/GoCodeAlone/modular/modules/eventbus/v2 v2.5.1 // indirect
 	github.com/GoCodeAlone/yaegi v0.17.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
