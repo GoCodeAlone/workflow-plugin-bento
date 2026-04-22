@@ -1,5 +1,11 @@
 version: 2
 
+
+before:
+  hooks:
+    - go mod tidy
+    - "sed -i.bak 's/\"version\": \".*\"/\"version\": \"{{ .Version }}\"/' plugin.json && rm -f plugin.json.bak"
+
 builds:
   - main: ./cmd/workflow-plugin-bento
     binary: workflow-plugin-bento
@@ -12,7 +18,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w -X main.version={{.Version}} -X github.com/GoCodeAlone/workflow-plugin-bento/internal.Version={{.Version}}
 
 archives:
   - formats: [tar.gz]

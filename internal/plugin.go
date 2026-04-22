@@ -7,6 +7,10 @@ import (
 	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 )
 
+// Version is set at build time via -ldflags
+// "-X github.com/GoCodeAlone/workflow-plugin-bento/internal.Version=X.Y.Z"
+var Version = "dev"
+
 // bentoPlugin implements PluginProvider, ModuleProvider, StepProvider, TriggerProvider.
 type bentoPlugin struct{}
 
@@ -19,7 +23,7 @@ func NewBentoPlugin() sdk.PluginProvider {
 func (p *bentoPlugin) Manifest() sdk.PluginManifest {
 	return sdk.PluginManifest{
 		Name:        "bento",
-		Version:     "1.0.0",
+		Version:     Version,
 		Author:      "GoCodeAlone",
 		Description: "Stream processing via Bento — 100+ connectors, Bloblang transforms, at-least-once delivery",
 	}
