@@ -1,13 +1,19 @@
 {
     "name": "bento",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "author": "GoCodeAlone",
-    "description": "Stream processing via Bento — 100+ connectors, Bloblang transforms, at-least-once delivery",
+    "description": "Stream processing via Bento \u2014 100+ connectors, Bloblang transforms, at-least-once delivery",
     "type": "external",
     "tier": "core",
     "license": "MIT",
-    "minEngineVersion": "0.1.0",
-    "keywords": ["bento", "streaming", "kafka", "sqs", "pubsub"],
+    "minEngineVersion": "0.51.7",
+    "keywords": [
+        "bento",
+        "streaming",
+        "kafka",
+        "sqs",
+        "pubsub"
+    ],
     "capabilities": {
         "modules": [
             "bento.stream",
