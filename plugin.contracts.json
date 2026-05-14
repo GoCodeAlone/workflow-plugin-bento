@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "contracts": [
+    {
+      "kind": "module",
+      "type": "bento.stream",
+      "mode": "strict_proto",
+      "config": "workflow.plugin.bento.v1.StreamModuleConfig"
+    },
+    {
+      "kind": "module",
+      "type": "bento.input",
+      "mode": "strict_proto",
+      "config": "workflow.plugin.bento.v1.InputModuleConfig"
+    },
+    {
+      "kind": "module",
+      "type": "bento.output",
+      "mode": "strict_proto",
+      "config": "workflow.plugin.bento.v1.OutputModuleConfig"
+    },
+    {
+      "kind": "module",
+      "type": "bento.broker",
+      "mode": "strict_proto",
+      "config": "workflow.plugin.bento.v1.BrokerModuleConfig"
+    },
+    {
+      "kind": "step",
+      "type": "step.bento",
+      "mode": "strict_proto",
+      "config": "workflow.plugin.bento.v1.ProcessorStepConfig",
+      "input": "workflow.plugin.bento.v1.ProcessorStepInput",
+      "output": "workflow.plugin.bento.v1.ProcessorStepOutput"
+    }
+  ]
+}
