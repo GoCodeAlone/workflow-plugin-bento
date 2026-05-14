@@ -1,6 +1,6 @@
 {
     "name": "bento",
-    "version": "1.1.0",
+    "version": "1.1.2",
     "author": "GoCodeAlone",
     "description": "Stream processing via Bento — 100+ connectors, Bloblang transforms, at-least-once delivery",
     "type": "external",
