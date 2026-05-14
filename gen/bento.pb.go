@@ -296,8 +296,10 @@ func (x *BrokerModuleConfig) GetTransportConfig() *structpb.Struct {
 // Runs data through Bento processors (Bloblang, jmespath, etc.) as a pipeline step.
 type ProcessorStepConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// processors is a YAML string or serialised map defining Bento processors.
-	Processors    string `protobuf:"bytes,1,opt,name=processors,proto3" json:"processors,omitempty"`
+	// processors holds Bento processor definitions.
+	// Accepts either a YAML string (scalar Value) or a map/list of processor
+	// objects (Struct/List Value) — both forms are supported by the runtime.
+	Processors    *structpb.Value `protobuf:"bytes,1,opt,name=processors,proto3" json:"processors,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,11 +334,11 @@ func (*ProcessorStepConfig) Descriptor() ([]byte, []int) {
 	return file_bento_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ProcessorStepConfig) GetProcessors() string {
+func (x *ProcessorStepConfig) GetProcessors() *structpb.Value {
 	if x != nil {
 		return x.Processors
 	}
-	return ""
+	return nil
 }
 
 // ProcessorStepInput carries the runtime input data for a step.bento execution.
@@ -453,10 +455,10 @@ const file_bento_proto_rawDesc = "" +
 	"\rsource_broker\x18\x03 \x01(\tR\fsourceBroker\"v\n" +
 	"\x12BrokerModuleConfig\x12\x1c\n" +
 	"\ttransport\x18\x01 \x01(\tR\ttransport\x12B\n" +
-	"\x10transport_config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x0ftransportConfig\"5\n" +
-	"\x13ProcessorStepConfig\x12\x1e\n" +
+	"\x10transport_config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x0ftransportConfig\"M\n" +
+	"\x13ProcessorStepConfig\x126\n" +
 	"\n" +
-	"processors\x18\x01 \x01(\tR\n" +
+	"processors\x18\x01 \x01(\v2\x16.google.protobuf.ValueR\n" +
 	"processors\"A\n" +
 	"\x12ProcessorStepInput\x12+\n" +
 	"\x04data\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x04data\"F\n" +
@@ -485,6 +487,7 @@ var file_bento_proto_goTypes = []any{
 	(*ProcessorStepInput)(nil),  // 5: workflow.plugin.bento.v1.ProcessorStepInput
 	(*ProcessorStepOutput)(nil), // 6: workflow.plugin.bento.v1.ProcessorStepOutput
 	(*structpb.Struct)(nil),     // 7: google.protobuf.Struct
+	(*structpb.Value)(nil),      // 8: google.protobuf.Value
 }
 var file_bento_proto_depIdxs = []int32{
 	7,  // 0: workflow.plugin.bento.v1.StreamModuleConfig.input:type_name -> google.protobuf.Struct
@@ -495,13 +498,14 @@ var file_bento_proto_depIdxs = []int32{
 	7,  // 5: workflow.plugin.bento.v1.InputModuleConfig.input:type_name -> google.protobuf.Struct
 	7,  // 6: workflow.plugin.bento.v1.OutputModuleConfig.output:type_name -> google.protobuf.Struct
 	7,  // 7: workflow.plugin.bento.v1.BrokerModuleConfig.transport_config:type_name -> google.protobuf.Struct
-	7,  // 8: workflow.plugin.bento.v1.ProcessorStepInput.data:type_name -> google.protobuf.Struct
-	7,  // 9: workflow.plugin.bento.v1.ProcessorStepOutput.result:type_name -> google.protobuf.Struct
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	8,  // 8: workflow.plugin.bento.v1.ProcessorStepConfig.processors:type_name -> google.protobuf.Value
+	7,  // 9: workflow.plugin.bento.v1.ProcessorStepInput.data:type_name -> google.protobuf.Struct
+	7,  // 10: workflow.plugin.bento.v1.ProcessorStepOutput.result:type_name -> google.protobuf.Struct
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_bento_proto_init() }

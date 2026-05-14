@@ -55,8 +55,10 @@ message BrokerModuleConfig {
 // ProcessorStepConfig is the typed config for step.bento.
 // Runs data through Bento processors (Bloblang, jmespath, etc.) as a pipeline step.
 message ProcessorStepConfig {
-  // processors is a YAML string or serialised map defining Bento processors.
-  string processors = 1;
+  // processors holds Bento processor definitions.
+  // Accepts either a YAML string (scalar Value) or a map/list of processor
+  // objects (Struct/List Value) — both forms are supported by the runtime.
+  google.protobuf.Value processors = 1;
 }
 
 // ProcessorStepInput carries the runtime input data for a step.bento execution.
