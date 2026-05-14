@@ -3,6 +3,7 @@ package internal
 import (
 	bentov1 "github.com/GoCodeAlone/workflow-plugin-bento/gen"
 	pb "github.com/GoCodeAlone/workflow/plugin/external/proto"
+	sdk "github.com/GoCodeAlone/workflow/plugin/external/sdk"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -68,4 +69,4 @@ var bentoContractRegistry = &pb.ContractRegistry{
 const bentoProtoPkg = "workflow.plugin.bento.v1."
 
 // Compile-time assertion: bentoPlugin implements sdk.ContractProvider.
-var _ interface{ ContractRegistry() *pb.ContractRegistry } = (*bentoPlugin)(nil)
+var _ sdk.ContractProvider = (*bentoPlugin)(nil)
