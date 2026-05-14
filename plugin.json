@@ -1,8 +1,8 @@
 {
     "name": "bento",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "author": "GoCodeAlone",
-    "description": "Stream processing via Bento \u2014 100+ connectors, Bloblang transforms, at-least-once delivery",
+    "description": "Stream processing via Bento — 100+ connectors, Bloblang transforms, at-least-once delivery",
     "type": "external",
     "tier": "core",
     "license": "MIT",
@@ -14,16 +14,43 @@
         "sqs",
         "pubsub"
     ],
-    "capabilities": {
-        "modules": [
-            "bento.stream",
-            "bento.input",
-            "bento.output",
-            "bento.broker"
-        ],
-        "steps": [
-            "step.bento"
-        ],
-        "triggers": []
-    }
+    "homepage": "https://github.com/GoCodeAlone/workflow-plugin-bento",
+    "repository": "https://github.com/GoCodeAlone/workflow-plugin-bento",
+    "moduleTypes": ["bento.stream", "bento.input", "bento.output", "bento.broker"],
+    "stepTypes": ["step.bento"],
+    "triggerTypes": [],
+    "contracts": [
+        {
+            "kind": "module",
+            "type": "bento.stream",
+            "mode": "strict_proto",
+            "config": "workflow.plugin.bento.v1.StreamModuleConfig"
+        },
+        {
+            "kind": "module",
+            "type": "bento.input",
+            "mode": "strict_proto",
+            "config": "workflow.plugin.bento.v1.InputModuleConfig"
+        },
+        {
+            "kind": "module",
+            "type": "bento.output",
+            "mode": "strict_proto",
+            "config": "workflow.plugin.bento.v1.OutputModuleConfig"
+        },
+        {
+            "kind": "module",
+            "type": "bento.broker",
+            "mode": "strict_proto",
+            "config": "workflow.plugin.bento.v1.BrokerModuleConfig"
+        },
+        {
+            "kind": "step",
+            "type": "step.bento",
+            "mode": "strict_proto",
+            "config": "workflow.plugin.bento.v1.ProcessorStepConfig",
+            "input": "workflow.plugin.bento.v1.ProcessorStepInput",
+            "output": "workflow.plugin.bento.v1.ProcessorStepOutput"
+        }
+    ]
 }

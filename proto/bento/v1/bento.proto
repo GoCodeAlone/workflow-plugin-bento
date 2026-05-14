@@ -1,0 +1,73 @@
+syntax = "proto3";
+package workflow.plugin.bento.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/GoCodeAlone/workflow-plugin-bento/gen;bentov1";
+
+// StreamModuleConfig is the typed config for the bento.stream module type.
+// A full Bento stream: input → pipeline processors → output.
+message StreamModuleConfig {
+  // input is the Bento input configuration (e.g. kafka, sqs, generate).
+  // Passed as a free-form Struct to support all 100+ Bento input types.
+  google.protobuf.Struct input = 1;
+  // pipeline holds the optional Bento pipeline (processors) configuration.
+  google.protobuf.Struct pipeline = 2;
+  // output is the Bento output configuration.
+  google.protobuf.Struct output = 3;
+  // logger is the optional Bento logger configuration.
+  google.protobuf.Struct logger = 4;
+  // metrics is the optional Bento metrics configuration.
+  google.protobuf.Struct metrics = 5;
+}
+
+// InputModuleConfig is the typed config for the bento.input module type.
+// Wraps a Bento input as an event source; publishes messages to the host EventBus.
+message InputModuleConfig {
+  // input is the Bento input configuration.
+  google.protobuf.Struct input = 1;
+  // target_topic is the host EventBus topic to publish messages to.
+  string target_topic = 2;
+  // target_broker is the optional broker name on the host.
+  string target_broker = 3;
+}
+
+// OutputModuleConfig is the typed config for the bento.output module type.
+// Subscribes to a host EventBus topic and forwards messages to Bento output.
+message OutputModuleConfig {
+  // output is the Bento output configuration.
+  google.protobuf.Struct output = 1;
+  // source_topic is the host EventBus topic to subscribe to.
+  string source_topic = 2;
+  // source_broker is the optional broker name on the host.
+  string source_broker = 3;
+}
+
+// BrokerModuleConfig is the typed config for the bento.broker module type.
+// Drop-in MessageBroker implemented via Bento transport.
+message BrokerModuleConfig {
+  // transport is the Bento transport type (e.g. kafka, nats, memory).
+  string transport = 1;
+  // transport_config holds transport-specific configuration.
+  google.protobuf.Struct transport_config = 2;
+}
+
+// ProcessorStepConfig is the typed config for step.bento.
+// Runs data through Bento processors (Bloblang, jmespath, etc.) as a pipeline step.
+message ProcessorStepConfig {
+  // processors is a YAML string or serialised map defining Bento processors.
+  string processors = 1;
+}
+
+// ProcessorStepInput carries the runtime input data for a step.bento execution.
+// All step inputs are passed as a free-form Struct.
+message ProcessorStepInput {
+  // data holds the merged trigger + current step data passed to the processor.
+  google.protobuf.Struct data = 1;
+}
+
+// ProcessorStepOutput holds the result of a step.bento execution.
+message ProcessorStepOutput {
+  // result holds the transformed output data returned by the Bento processors.
+  google.protobuf.Struct result = 1;
+}

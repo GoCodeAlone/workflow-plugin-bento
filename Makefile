@@ -3,7 +3,18 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 LDFLAGS = -ldflags "-X main.version=$(VERSION)"
 PLATFORMS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: build clean test lint install cross-build
+.PHONY: build clean test lint install cross-build proto-gen
+
+# Regenerate Go bindings from proto/bento/v1/bento.proto.
+# Requires: protoc + protoc-gen-go
+#   brew install protobuf
+#   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+proto-gen:
+	protoc \
+		--proto_path=proto/bento/v1 \
+		--go_out=gen \
+		--go_opt=paths=source_relative \
+		proto/bento/v1/bento.proto
 
 build:
 	go build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
