@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
 
       - name: Configure git for private modules
         run: git config --global url."https://${{ secrets.RELEASES_TOKEN }}@github.com/".insteadOf "https://github.com/"
@@ -41,6 +41,7 @@ jobs:
       - uses: GoCodeAlone/setup-wfctl@bcd880980f5bbe8d192d0c20ff6279d25331f956
         with:
           version: ${{ steps.wfctl-ver.outputs.version }}
+          token: ${{ secrets.RELEASES_TOKEN }}
 
       - name: Validate strict plugin contracts
         run: wfctl plugin validate --file plugin.json --strict-contracts
