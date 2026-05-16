@@ -6,7 +6,7 @@
     "type": "external",
     "tier": "core",
     "license": "MIT",
-    "minEngineVersion": "0.51.7",
+    "minEngineVersion": "0.53.0",
     "keywords": [
         "bento",
         "streaming",
