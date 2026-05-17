@@ -35,7 +35,13 @@ jobs:
           script: |
             const tag = process.env.GITHUB_REF_NAME;
             const { owner, repo } = context.repo;
-            const { data: release } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            // listReleases returns drafts; getReleaseByTag 404s on drafts. GoReleaser
+            // creates releases as draft; this step flips them to non-draft post-publish.
+            const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            const release = releases.find(r => r.tag_name === tag);
+            if (!release) {
+              throw new Error(`release for tag ${tag} not found in repo listing (latest 100 releases)`);
+            }
             if (release.draft) {
               await github.rest.repos.updateRelease({
                 owner,
