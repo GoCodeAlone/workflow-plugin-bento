@@ -13,5 +13,5 @@ import (
 )
 
 func main() {
-	sdk.Serve(internal.NewBentoPlugin())
+	sdk.Serve(internal.NewBentoPlugin(), sdk.WithBuildVersion(sdk.ResolveBuildVersion(internal.Version)))
 }
