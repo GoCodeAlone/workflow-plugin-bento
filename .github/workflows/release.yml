@@ -21,12 +21,12 @@ jobs:
           cache: true
       - name: Configure git for private modules
         run: git config --global url."https://${{ secrets.RELEASES_TOKEN }}@github.com/".insteadOf "https://github.com/"
-      - name: Install wfctl v0.63.1
+      - name: Install wfctl v0.63.2
         run: |
           mkdir -p "${RUNNER_TEMP}/wfctl-bin"
           curl -sSfL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -o "${RUNNER_TEMP}/wfctl-bin/wfctl" \
-            "https://github.com/GoCodeAlone/workflow/releases/download/v0.63.1/wfctl-linux-amd64"
+            "https://github.com/GoCodeAlone/workflow/releases/download/v0.63.2/wfctl-linux-amd64"
           chmod +x "${RUNNER_TEMP}/wfctl-bin/wfctl"
       - name: Validate plugin contract for publish (pre-build)
         run: "${{ runner.temp }}/wfctl-bin/wfctl plugin validate-contract --for-publish --tag ${{ github.ref_name }} ."
